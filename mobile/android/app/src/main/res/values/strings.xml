@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">DailyOS</string>
-    <string name="title_activity_main">DailyOS</string>
-    <string name="package_name">com.dailyos.app</string>
-    <string name="custom_url_scheme">com.dailyos.app</string>
-</resources>
