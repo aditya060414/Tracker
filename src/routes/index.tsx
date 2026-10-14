@@ -14,7 +14,7 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
-type Goal = { id: string; text: string; done: boolean; time?: string };
+type Goal = { id: string; text: string; done: boolean; time?: string | undefined };
 type Tx = { id: string; name: string; cat: string; amount: number; date: string };
 type FocusSession = { id: string; minutes: number };
 type SpecialTaskData = { title: string; done: boolean };

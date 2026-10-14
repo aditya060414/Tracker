@@ -1,15 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Mountain, CalendarRange, Sun, Grid2x2, Flag, NotebookPen, Plus, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Mountain, CalendarRange, Sun, Grid2x2, Flag, NotebookPen, Plus, Trash2, Check } from "lucide-react";
 import { PageHeader, Panel, SectionHeader, ProgressBar, Tag, EmptyState } from "@/components/common/ui";
 import { useLocal } from "@/lib/use-local";
 import { pageHead } from "@/lib/meta";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/planning")({
   head: pageHead("Planning", "Monthly objectives, weekly outcomes, daily plans and a priority matrix."),
   component: Planning,
 });
 
+export type Goal = { id: string; text: string; done: boolean; time?: string | undefined };
 type Objective = { id: string; name: string; pct: number };
 type TimeBlock = { id: string; time: string; text: string };
 type Milestone = { id: string; date: string; title: string };
@@ -24,7 +26,8 @@ const matrixCategories = [
 function Planning() {
   const [objectives, setObjectives] = useLocal<Objective[]>("planning-objectives", []);
   const [outcomes, setOutcomes] = useLocal<string[]>("planning-outcomes", []);
-  const [todayPlan, setTodayPlan] = useLocal<TimeBlock[]>("planning-today-plan", []);
+  const [goals, setGoals] = useLocal<Goal[]>("goals", []);
+  const [legacyTodayPlan, setLegacyTodayPlan] = useLocal<TimeBlock[]>("planning-today-plan", []);
   const [matrix, setMatrix] = useLocal<Record<string, string[]>>("planning-matrix", {
     ui: [],
     iu: [],
@@ -49,6 +52,24 @@ function Planning() {
   const [newMilestoneDate, setNewMilestoneDate] = useState("");
   const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
 
+  // Seamlessly migrate any legacy planning-today-plan items into shared goals
+  useEffect(() => {
+    if (legacyTodayPlan.length > 0) {
+      const toMigrate: Goal[] = legacyTodayPlan
+        .filter((tp) => !goals.some((g) => g.text === tp.text))
+        .map((tp) => ({
+          id: tp.id || crypto.randomUUID(),
+          text: tp.text,
+          done: false,
+          time: tp.time !== "Anytime" ? tp.time : undefined,
+        }));
+      if (toMigrate.length > 0) {
+        setGoals([...goals, ...toMigrate]);
+      }
+      setLegacyTodayPlan([]);
+    }
+  }, [legacyTodayPlan, goals, setGoals, setLegacyTodayPlan]);
+
   const addObjective = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newObjName.trim()) return;
@@ -72,19 +93,24 @@ function Planning() {
     setNewOutcome("");
   };
 
-  const addPlanBlock = (e: React.FormEvent) => {
+  const addPlanGoal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlanText.trim()) return;
-    setTodayPlan([
-      ...todayPlan,
+    setGoals([
+      ...goals,
       {
         id: crypto.randomUUID(),
-        time: newPlanTime.trim() || "Anytime",
         text: newPlanText.trim(),
+        done: false,
+        time: newPlanTime.trim() || undefined,
       },
     ]);
     setNewPlanText("");
     setNewPlanTime("");
+  };
+
+  const removeGoal = (id: string) => {
+    setGoals(goals.filter((g) => g.id !== id));
   };
 
   const addMatrixItem = (e: React.FormEvent) => {
@@ -226,46 +252,88 @@ function Planning() {
           )}
         </Panel>
 
-        {/* Today's plan */}
+        {/* Today's daily goals (Synced with Dashboard) */}
         <Panel>
-          <SectionHeader title="Today's plan" icon={Sun} action={<Tag tone="success">Daily</Tag>} />
-          <form onSubmit={addPlanBlock} className="mb-3 flex gap-2">
+          <SectionHeader
+            title="Today's daily goals"
+            icon={Sun}
+            action={
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-medium">
+                  {goals.filter((g) => g.done).length}/{goals.length} done
+                </span>
+                <Tag tone="success">Daily</Tag>
+              </div>
+            }
+          />
+          <form onSubmit={addPlanGoal} className="mb-3 flex gap-2">
             <input
               value={newPlanTime}
               onChange={(e) => setNewPlanTime(e.target.value)}
               placeholder="09:00"
-              className="h-9 w-20 rounded-md border bg-background px-2 text-xs outline-none"
+              className="h-9 w-20 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <input
               value={newPlanText}
               onChange={(e) => setNewPlanText(e.target.value)}
-              placeholder="Activity..."
-              className="h-9 flex-1 rounded-md border bg-background px-2.5 text-xs outline-none"
+              placeholder="Add daily goal or plan..."
+              className="h-9 flex-1 rounded-md border bg-background px-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              required
             />
-            <button type="submit" className="grid size-9 place-items-center rounded-md bg-primary text-primary-foreground">
+            <button
+              type="submit"
+              className="grid size-9 place-items-center rounded-md bg-primary text-primary-foreground hover:bg-primary-hover transition-colors"
+              aria-label="Add daily goal"
+            >
               <Plus className="size-4" />
             </button>
           </form>
 
-          {todayPlan.length === 0 ? (
-            <EmptyState text="No schedule blocks added for today." />
+          {goals.length === 0 ? (
+            <EmptyState text="No daily goals set for today. Add one above or from the dashboard." />
           ) : (
-            <div className="space-y-2">
-              {todayPlan.map((p) => (
-                <div key={p.id} className="group flex items-center justify-between border-l-2 border-border py-1 pl-3 text-sm">
-                  <div className="flex items-center gap-3">
-                    <span className="w-12 text-muted-foreground tabular-nums text-xs">{p.time}</span>
-                    <span>{p.text}</span>
-                  </div>
+            <ul className="space-y-1.5">
+              {goals.map((g) => (
+                <li
+                  key={g.id}
+                  className="group flex min-h-9 items-center justify-between rounded-lg px-2 hover:bg-elevated transition-colors"
+                >
+                  <label className="flex flex-1 cursor-pointer items-center gap-2.5 py-1">
+                    <input
+                      type="checkbox"
+                      checked={g.done}
+                      onChange={() =>
+                        setGoals(goals.map((x) => (x.id === g.id ? { ...x, done: !x.done } : x)))
+                      }
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={cn(
+                        "grid size-4.5 shrink-0 place-items-center rounded border-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring",
+                        g.done ? "border-success bg-success text-background" : "border-border",
+                      )}
+                    >
+                      {g.done && <Check className="size-3" strokeWidth={3} />}
+                    </span>
+                    {g.time && (
+                      <span className="rounded bg-elevated px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground tabular-nums">
+                        {g.time}
+                      </span>
+                    )}
+                    <span className={cn("text-sm flex-1", g.done && "text-muted-foreground line-through")}>
+                      {g.text}
+                    </span>
+                  </label>
                   <button
-                    onClick={() => setTodayPlan(todayPlan.filter((x) => x.id !== p.id))}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger"
+                    onClick={() => removeGoal(g.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-danger transition-opacity"
+                    aria-label={`Delete ${g.text}`}
                   >
-                    <Trash2 className="size-3" />
+                    <Trash2 className="size-3.5" />
                   </button>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </Panel>
 
