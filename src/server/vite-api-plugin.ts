@@ -55,10 +55,15 @@ export function apiDevServerPlugin(): Plugin {
           }
           next();
         } catch (err: any) {
+          if (err?.message === "aborted" || err?.name === "AbortError" || err?.code === "ECONNRESET") {
+            return;
+          }
           console.error("[Vite API Plugin] Error:", err);
-          res.statusCode = 500;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: err?.message || "Internal server error" }));
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: err?.message || "Internal server error" }));
+          }
         }
       });
     },
