@@ -16,6 +16,8 @@ import {
   ChevronUp,
   ChevronDown,
   ArrowUpDown,
+  Pencil,
+  X,
 } from "lucide-react";
 import { PageHeader, Panel, SectionHeader, ProgressBar, Tag, EmptyState } from "@/components/common/ui";
 import { useLocal } from "@/lib/use-local";
@@ -78,6 +80,26 @@ function Planning() {
 
   const [newMilestoneDate, setNewMilestoneDate] = useState("");
   const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
+
+  // Edit states for planning items
+  const [editingObjId, setEditingObjId] = useState<string | null>(null);
+  const [editingObjName, setEditingObjName] = useState("");
+  const [editingObjPct, setEditingObjPct] = useState(0);
+
+  const [editingOutcomeIdx, setEditingOutcomeIdx] = useState<number | null>(null);
+  const [editingOutcomeText, setEditingOutcomeText] = useState("");
+
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [editingGoalText, setEditingGoalText] = useState("");
+  const [editingGoalTime, setEditingGoalTime] = useState("");
+
+  const [editingMatrixKey, setEditingMatrixKey] = useState<string | null>(null);
+  const [editingMatrixIdx, setEditingMatrixIdx] = useState<number | null>(null);
+  const [editingMatrixText, setEditingMatrixText] = useState("");
+
+  const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
+  const [editingMilestoneDate, setEditingMilestoneDate] = useState("");
+  const [editingMilestoneTitle, setEditingMilestoneTitle] = useState("");
 
   // Reorder & shuffle states
   const [draggedGoalIdx, setDraggedGoalIdx] = useState<number | null>(null);
@@ -240,6 +262,73 @@ function Planning() {
     setNewMilestoneDate("");
   };
 
+  const saveEditObjective = (id: string) => {
+    const trimmed = editingObjName.trim();
+    if (!trimmed) {
+      toast.error("Objective title cannot be empty.");
+      return;
+    }
+    setObjectives(
+      objectives.map((o) =>
+        o.id === id ? { ...o, name: trimmed, pct: Math.min(100, Math.max(0, editingObjPct)) } : o,
+      ),
+    );
+    setEditingObjId(null);
+    toast.success("Objective updated!");
+  };
+
+  const saveEditOutcome = (idx: number) => {
+    const trimmed = editingOutcomeText.trim();
+    if (!trimmed) {
+      toast.error("Outcome cannot be empty.");
+      return;
+    }
+    const updated = [...outcomes];
+    updated[idx] = trimmed;
+    setOutcomes(updated);
+    setEditingOutcomeIdx(null);
+    toast.success("Weekly outcome updated!");
+  };
+
+  const saveEditGoal = (id: string) => {
+    const trimmed = editingGoalText.trim();
+    if (!trimmed) {
+      toast.error("Goal text cannot be empty.");
+      return;
+    }
+    setGoals(
+      goals.map((g) =>
+        g.id === id ? { ...g, text: trimmed, time: editingGoalTime.trim() || undefined } : g,
+      ),
+    );
+    setEditingGoalId(null);
+    toast.success("Daily goal updated!");
+  };
+
+  const saveEditMatrixItem = (catKey: string, idx: number) => {
+    const trimmed = editingMatrixText.trim();
+    if (!trimmed) return;
+    const current = matrix[catKey] || [];
+    const updated = [...current];
+    updated[idx] = trimmed;
+    setMatrix({ ...matrix, [catKey]: updated });
+    setEditingMatrixKey(null);
+    setEditingMatrixIdx(null);
+    toast.success("Matrix item updated!");
+  };
+
+  const saveEditMilestone = (id: string) => {
+    const trimmed = editingMilestoneTitle.trim();
+    if (!trimmed) return;
+    setMilestones(
+      milestones.map((m) =>
+        m.id === id ? { ...m, title: trimmed, date: editingMilestoneDate.trim() || "Soon" } : m,
+      ),
+    );
+    setEditingMilestoneId(null);
+    toast.success("Milestone updated!");
+  };
+
   return (
     <>
       <PageHeader title="Planning" description="From long-term goals to today's next step." />
@@ -290,23 +379,80 @@ function Planning() {
             <EmptyState text="No monthly objectives set yet." />
           ) : (
             <div className="space-y-4">
-              {objectives.map((o) => (
-                <div key={o.id} className="group relative">
-                  <div className="mb-1.5 flex justify-between text-sm">
-                    <span>{o.name}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">{o.pct}%</span>
-                      <button
-                        onClick={() => setObjectives(objectives.filter((x) => x.id !== o.id))}
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger"
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
+              {objectives.map((o) => {
+                if (editingObjId === o.id) {
+                  return (
+                    <div key={o.id} className="rounded-lg border border-primary/40 bg-elevated/70 p-2.5 text-xs space-y-2">
+                      <input
+                        value={editingObjName}
+                        onChange={(e) => setEditingObjName(e.target.value)}
+                        placeholder="Objective title"
+                        className="h-8 w-full rounded border bg-background px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        autoFocus
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={editingObjPct}
+                          onChange={(e) => setEditingObjPct(Number(e.target.value))}
+                          placeholder="Progress %"
+                          className="h-8 w-20 rounded border bg-background px-2 text-xs"
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                        <div className="flex-1" />
+                        <button
+                          type="button"
+                          onClick={() => saveEditObjective(o.id)}
+                          className="flex items-center gap-1 rounded bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary-hover transition-colors"
+                        >
+                          <Check className="size-3.5" /> Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingObjId(null)}
+                          className="rounded border px-2 py-1 text-xs text-muted-foreground hover:bg-elevated transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
+                  );
+                }
+
+                return (
+                  <div key={o.id} className="group relative">
+                    <div className="mb-1.5 flex justify-between text-sm">
+                      <span className="font-medium">{o.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground text-xs">{o.pct}%</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingObjId(o.id);
+                            setEditingObjName(o.name);
+                            setEditingObjPct(o.pct);
+                          }}
+                          title="Edit objective"
+                          className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          <Pencil className="size-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setObjectives(objectives.filter((x) => x.id !== o.id))}
+                          title="Delete objective"
+                          className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-danger transition-colors"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      </div>
+                    </div>
+                    <ProgressBar value={o.pct} label={o.name} />
                   </div>
-                  <ProgressBar value={o.pct} label={o.name} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Panel>
@@ -349,62 +495,113 @@ function Planning() {
             <EmptyState text="No outcomes planned for this week yet." />
           ) : (
             <ul className="space-y-1.5 text-sm">
-              {outcomes.map((item, idx) => (
-                <li
-                  key={idx}
-                  draggable
-                  onDragStart={() => setDraggedOutcomeIdx(idx)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (draggedOutcomeIdx !== null && draggedOutcomeIdx !== idx) {
-                      moveOutcome(draggedOutcomeIdx, idx);
-                    }
-                    setDraggedOutcomeIdx(null);
-                  }}
-                  onDragEnd={() => setDraggedOutcomeIdx(null)}
-                  className={cn(
-                    "group flex items-center justify-between gap-2 border-b pb-1.5 last:border-b-0 rounded px-1.5 py-1 transition-colors hover:bg-elevated/40",
-                    draggedOutcomeIdx === idx && "opacity-40 border border-dashed border-primary",
-                  )}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span
-                      className="cursor-grab text-muted-foreground/40 hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
-                      title="Drag to reorder"
-                    >
-                      <GripVertical className="size-3.5" />
-                    </span>
-                    <span className="truncate">• {item}</span>
-                  </div>
-                  <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      disabled={idx === 0}
-                      onClick={() => moveOutcome(idx, idx - 1)}
-                      title="Move up"
-                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
-                    >
-                      <ChevronUp className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={idx === outcomes.length - 1}
-                      onClick={() => moveOutcome(idx, idx + 1)}
-                      title="Move down"
-                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
-                    >
-                      <ChevronDown className="size-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setOutcomes(outcomes.filter((_, i) => i !== idx))}
-                      className="p-1 text-muted-foreground hover:text-danger transition-colors"
-                      title="Delete outcome"
-                    >
-                      <Trash2 className="size-3" />
-                    </button>
-                  </div>
-                </li>
-              ))}
+              {outcomes.map((item, idx) => {
+                if (editingOutcomeIdx === idx) {
+                  return (
+                    <li key={idx} className="flex items-center gap-1.5 rounded border border-primary/40 bg-accent/20 p-1.5 text-xs">
+                      <input
+                        value={editingOutcomeText}
+                        onChange={(e) => setEditingOutcomeText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveEditOutcome(idx);
+                          } else if (e.key === "Escape") {
+                            setEditingOutcomeIdx(null);
+                          }
+                        }}
+                        className="h-7 flex-1 rounded border bg-background px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveEditOutcome(idx)}
+                        title="Save outcome"
+                        className="grid size-7 place-items-center rounded bg-primary text-primary-foreground hover:bg-primary-hover transition-colors"
+                      >
+                        <Check className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingOutcomeIdx(null)}
+                        title="Cancel edit"
+                        className="grid size-7 place-items-center rounded border text-muted-foreground hover:bg-elevated transition-colors"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li
+                    key={idx}
+                    draggable
+                    onDragStart={() => setDraggedOutcomeIdx(idx)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (draggedOutcomeIdx !== null && draggedOutcomeIdx !== idx) {
+                        moveOutcome(draggedOutcomeIdx, idx);
+                      }
+                      setDraggedOutcomeIdx(null);
+                    }}
+                    onDragEnd={() => setDraggedOutcomeIdx(null)}
+                    className={cn(
+                      "group flex items-center justify-between gap-2 border-b pb-1.5 last:border-b-0 rounded px-1.5 py-1 transition-colors hover:bg-elevated/40",
+                      draggedOutcomeIdx === idx && "opacity-40 border border-dashed border-primary",
+                    )}
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span
+                        className="cursor-grab text-muted-foreground/40 hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
+                        title="Drag to reorder"
+                      >
+                        <GripVertical className="size-3.5" />
+                      </span>
+                      <span className="truncate">• {item}</span>
+                    </div>
+                    <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingOutcomeIdx(idx);
+                          setEditingOutcomeText(item);
+                        }}
+                        title="Edit outcome"
+                        className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => moveOutcome(idx, idx - 1)}
+                        title="Move up"
+                        className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                      >
+                        <ChevronUp className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === outcomes.length - 1}
+                        onClick={() => moveOutcome(idx, idx + 1)}
+                        title="Move down"
+                        className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOutcomes(outcomes.filter((_, i) => i !== idx))}
+                        className="p-1 text-muted-foreground hover:text-danger transition-colors"
+                        title="Delete outcome"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Panel>
@@ -511,86 +708,147 @@ function Planning() {
             <EmptyState text="No daily goals set for today. Add one above or from the dashboard." />
           ) : (
             <ul className="space-y-1.5">
-              {goals.map((g, idx) => (
-                <li
-                  key={g.id}
-                  draggable
-                  onDragStart={() => setDraggedGoalIdx(idx)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (draggedGoalIdx !== null && draggedGoalIdx !== idx) {
-                      moveGoal(draggedGoalIdx, idx);
-                    }
-                    setDraggedGoalIdx(null);
-                  }}
-                  onDragEnd={() => setDraggedGoalIdx(null)}
-                  className={cn(
-                    "group flex min-h-9 items-center justify-between rounded-lg px-2 hover:bg-elevated transition-colors",
-                    draggedGoalIdx === idx && "opacity-40 border border-dashed border-primary",
-                  )}
-                >
-                  <div
-                    className="mr-1.5 cursor-grab text-muted-foreground/40 hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
-                    title="Drag to reorder"
-                  >
-                    <GripVertical className="size-3.5" />
-                  </div>
-                  <label className="flex flex-1 cursor-pointer items-center gap-2.5 py-1">
-                    <input
-                      type="checkbox"
-                      checked={g.done}
-                      onChange={() =>
-                        setGoals(goals.map((x) => (x.id === g.id ? { ...x, done: !x.done } : x)))
-                      }
-                      className="peer sr-only"
-                    />
-                    <span
-                      className={cn(
-                        "grid size-4.5 shrink-0 place-items-center rounded border-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring",
-                        g.done ? "border-success bg-success text-background" : "border-border",
-                      )}
+              {goals.map((g, idx) => {
+                if (editingGoalId === g.id) {
+                  return (
+                    <li
+                      key={g.id}
+                      className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-accent/20 p-1.5 text-xs transition-all"
                     >
-                      {g.done && <Check className="size-3" strokeWidth={3} />}
-                    </span>
-                    {g.time && (
-                      <span className="rounded bg-elevated px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground tabular-nums">
-                        {g.time}
-                      </span>
-                    )}
-                    <span className={cn("text-sm flex-1", g.done && "text-muted-foreground line-through")}>
-                      {g.text}
-                    </span>
-                  </label>
+                      <input
+                        value={editingGoalTime}
+                        onChange={(e) => setEditingGoalTime(e.target.value)}
+                        placeholder="09:00"
+                        className="h-8 w-16 rounded border bg-background px-1.5 text-xs font-mono outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                      <input
+                        value={editingGoalText}
+                        onChange={(e) => setEditingGoalText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveEditGoal(g.id);
+                          } else if (e.key === "Escape") {
+                            setEditingGoalId(null);
+                          }
+                        }}
+                        placeholder="Goal description..."
+                        className="h-8 flex-1 rounded border bg-background px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveEditGoal(g.id)}
+                        title="Save goal"
+                        className="grid size-8 place-items-center rounded bg-primary text-primary-foreground hover:bg-primary-hover transition-colors"
+                      >
+                        <Check className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingGoalId(null)}
+                        title="Cancel edit"
+                        className="grid size-8 place-items-center rounded border text-muted-foreground hover:bg-elevated transition-colors"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </li>
+                  );
+                }
 
-                  <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      disabled={idx === 0}
-                      onClick={() => moveGoal(idx, idx - 1)}
-                      title="Move up"
-                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                return (
+                  <li
+                    key={g.id}
+                    draggable
+                    onDragStart={() => setDraggedGoalIdx(idx)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (draggedGoalIdx !== null && draggedGoalIdx !== idx) {
+                        moveGoal(draggedGoalIdx, idx);
+                      }
+                      setDraggedGoalIdx(null);
+                    }}
+                    onDragEnd={() => setDraggedGoalIdx(null)}
+                    className={cn(
+                      "group flex min-h-9 items-center justify-between rounded-lg px-2 hover:bg-elevated transition-colors",
+                      draggedGoalIdx === idx && "opacity-40 border border-dashed border-primary",
+                    )}
+                  >
+                    <div
+                      className="mr-1.5 cursor-grab text-muted-foreground/40 hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
+                      title="Drag to reorder"
                     >
-                      <ChevronUp className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={idx === goals.length - 1}
-                      onClick={() => moveGoal(idx, idx + 1)}
-                      title="Move down"
-                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
-                    >
-                      <ChevronDown className="size-3.5" />
-                    </button>
-                    <button
-                      onClick={() => removeGoal(g.id)}
-                      className="p-1 text-muted-foreground hover:text-danger transition-colors"
-                      aria-label={`Delete ${g.text}`}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                </li>
-              ))}
+                      <GripVertical className="size-3.5" />
+                    </div>
+                    <label className="flex flex-1 cursor-pointer items-center gap-2.5 py-1">
+                      <input
+                        type="checkbox"
+                        checked={g.done}
+                        onChange={() =>
+                          setGoals(goals.map((x) => (x.id === g.id ? { ...x, done: !x.done } : x)))
+                        }
+                        className="peer sr-only"
+                      />
+                      <span
+                        className={cn(
+                          "grid size-4.5 shrink-0 place-items-center rounded border-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring",
+                          g.done ? "border-success bg-success text-background" : "border-border",
+                        )}
+                      >
+                        {g.done && <Check className="size-3" strokeWidth={3} />}
+                      </span>
+                      {g.time && (
+                        <span className="rounded bg-elevated px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground tabular-nums">
+                          {g.time}
+                        </span>
+                      )}
+                      <span className={cn("text-sm flex-1", g.done && "text-muted-foreground line-through")}>
+                        {g.text}
+                      </span>
+                    </label>
+
+                    <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingGoalId(g.id);
+                          setEditingGoalText(g.text);
+                          setEditingGoalTime(g.time || "");
+                        }}
+                        title="Edit goal"
+                        className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => moveGoal(idx, idx - 1)}
+                        title="Move up"
+                        className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                      >
+                        <ChevronUp className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === goals.length - 1}
+                        onClick={() => moveGoal(idx, idx + 1)}
+                        title="Move down"
+                        className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={() => removeGoal(g.id)}
+                        className="p-1 text-muted-foreground hover:text-danger transition-colors"
+                        aria-label={`Delete ${g.text}`}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Panel>
@@ -631,17 +889,76 @@ function Planning() {
                     <p className="mt-3 text-xs text-muted-foreground italic">No items</p>
                   ) : (
                     <ul className="mt-3 space-y-1.5 text-xs">
-                      {items.map((i, idx) => (
-                        <li key={idx} className="group flex items-center justify-between">
-                          <span>• {i}</span>
-                          <button
-                            onClick={() => removeMatrixItem(q.key, idx)}
-                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger"
-                          >
-                            <Trash2 className="size-3" />
-                          </button>
-                        </li>
-                      ))}
+                      {items.map((i, idx) => {
+                        if (editingMatrixKey === q.key && editingMatrixIdx === idx) {
+                          return (
+                            <li key={idx} className="flex items-center gap-1 rounded border border-primary/40 bg-accent/20 p-1">
+                              <input
+                                value={editingMatrixText}
+                                onChange={(e) => setEditingMatrixText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    saveEditMatrixItem(q.key, idx);
+                                  } else if (e.key === "Escape") {
+                                    setEditingMatrixKey(null);
+                                    setEditingMatrixIdx(null);
+                                  }
+                                }}
+                                className="h-6 flex-1 rounded border bg-background px-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                onClick={() => saveEditMatrixItem(q.key, idx)}
+                                title="Save"
+                                className="grid size-6 place-items-center rounded bg-primary text-primary-foreground hover:bg-primary-hover transition-colors"
+                              >
+                                <Check className="size-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingMatrixKey(null);
+                                  setEditingMatrixIdx(null);
+                                }}
+                                title="Cancel"
+                                className="grid size-6 place-items-center rounded border text-muted-foreground hover:bg-elevated transition-colors"
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </li>
+                          );
+                        }
+
+                        return (
+                          <li key={idx} className="group flex items-center justify-between">
+                            <span className="truncate pr-1">• {i}</span>
+                            <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingMatrixKey(q.key);
+                                  setEditingMatrixIdx(idx);
+                                  setEditingMatrixText(i);
+                                }}
+                                title="Edit item"
+                                className="p-0.5 text-muted-foreground hover:text-primary transition-colors"
+                              >
+                                <Pencil className="size-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeMatrixItem(q.key, idx)}
+                                title="Delete item"
+                                className="p-0.5 text-muted-foreground hover:text-danger transition-colors"
+                              >
+                                <Trash2 className="size-3" />
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -676,20 +993,79 @@ function Planning() {
               <EmptyState text="No upcoming milestones set." />
             ) : (
               <div className="space-y-1.5 text-sm">
-                {milestones.map((m) => (
-                  <div key={m.id} className="group flex items-center justify-between py-1 border-b last:border-b-0">
-                    <span>{m.title}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{m.date}</span>
-                      <button
-                        onClick={() => setMilestones(milestones.filter((x) => x.id !== m.id))}
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger"
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
+                {milestones.map((m) => {
+                  if (editingMilestoneId === m.id) {
+                    return (
+                      <div key={m.id} className="flex items-center gap-1.5 rounded border border-primary/40 bg-accent/20 p-1.5 text-xs">
+                        <input
+                          value={editingMilestoneDate}
+                          onChange={(e) => setEditingMilestoneDate(e.target.value)}
+                          placeholder="Date"
+                          className="h-7 w-20 rounded border bg-background px-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                        <input
+                          value={editingMilestoneTitle}
+                          onChange={(e) => setEditingMilestoneTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              saveEditMilestone(m.id);
+                            } else if (e.key === "Escape") {
+                              setEditingMilestoneId(null);
+                            }
+                          }}
+                          placeholder="Milestone title"
+                          className="h-7 flex-1 rounded border bg-background px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => saveEditMilestone(m.id)}
+                          title="Save milestone"
+                          className="grid size-7 place-items-center rounded bg-primary text-primary-foreground hover:bg-primary-hover transition-colors"
+                        >
+                          <Check className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingMilestoneId(null)}
+                          title="Cancel edit"
+                          className="grid size-7 place-items-center rounded border text-muted-foreground hover:bg-elevated transition-colors"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={m.id} className="group flex items-center justify-between py-1 border-b last:border-b-0">
+                      <span className="font-medium">{m.title}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">{m.date}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingMilestoneId(m.id);
+                            setEditingMilestoneDate(m.date);
+                            setEditingMilestoneTitle(m.title);
+                          }}
+                          title="Edit milestone"
+                          className="opacity-80 sm:opacity-0 sm:group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          <Pencil className="size-3" />
+                        </button>
+                        <button
+                          onClick={() => setMilestones(milestones.filter((x) => x.id !== m.id))}
+                          title="Delete milestone"
+                          className="opacity-80 sm:opacity-0 sm:group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-danger transition-colors"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Panel>

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
-  Target, Timer, Percent, ListChecks, Trophy, Wallet, Star, FileText, TrendingUp, Plus, Check, ArrowRight, Flame, Trash2,
+  Target, Timer, Percent, ListChecks, Trophy, Wallet, Star, FileText, TrendingUp, Plus, Check, ArrowRight, Flame, Trash2, Pencil, X,
 } from "lucide-react";
 import { Panel, SectionHeader, StatCard, ProgressBar, Tag, EmptyState } from "@/components/common/ui";
 import { useLocal } from "@/lib/use-local";
@@ -59,10 +59,20 @@ function Dashboard() {
       ? `${Math.floor(totalFocusMinutes / 60)}h ${totalFocusMinutes % 60 ? `${totalFocusMinutes % 60}m` : ""}`
       : `${totalFocusMinutes}m`;
 
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [editingGoalText, setEditingGoalText] = useState("");
+
   const addGoal = () => {
     if (!draft.trim()) return;
     setGoals([...goals, { id: crypto.randomUUID(), text: draft.trim(), done: false }]);
     setDraft("");
+  };
+
+  const saveEditGoal = (id: string) => {
+    const trimmed = editingGoalText.trim();
+    if (!trimmed) return;
+    setGoals(goals.map((g) => (g.id === id ? { ...g, text: trimmed } : g)));
+    setEditingGoalId(null);
   };
 
   const removeGoal = (id: string) => {
@@ -136,35 +146,85 @@ function Dashboard() {
             <EmptyState text="No goals yet — add your first goal below to start your day." />
           ) : (
             <ul className="space-y-1">
-              {goals.map((g) => (
-                <li key={g.id} className="group flex items-center justify-between rounded-lg px-2 hover:bg-elevated">
-                  <label className="flex min-h-11 flex-1 cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={g.done}
-                      onChange={() => setGoals(goals.map((x) => (x.id === g.id ? { ...x, done: !x.done } : x)))}
-                      className="peer sr-only"
-                    />
-                    <span
-                      className={cn(
-                        "grid size-5 shrink-0 place-items-center rounded-md border-2 peer-focus-visible:ring-2 peer-focus-visible:ring-ring",
-                        g.done ? "border-success bg-success text-background" : "border-border",
-                      )}
-                    >
-                      {g.done && <Check className="size-3.5" strokeWidth={3} />}
-                    </span>
-                    <span className={cn("flex-1", g.done && "text-muted-foreground line-through")}>{g.text}</span>
-                    {g.time && <span className="text-xs text-muted-foreground tabular-nums">{g.time}</span>}
-                  </label>
-                  <button
-                    onClick={() => removeGoal(g.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-danger"
-                    aria-label={`Delete ${g.text}`}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </li>
-              ))}
+              {goals.map((g) => {
+                if (editingGoalId === g.id) {
+                  return (
+                    <li key={g.id} className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-accent/20 p-1.5 text-xs">
+                      <input
+                        value={editingGoalText}
+                        onChange={(e) => setEditingGoalText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveEditGoal(g.id);
+                          } else if (e.key === "Escape") {
+                            setEditingGoalId(null);
+                          }
+                        }}
+                        className="h-8 flex-1 rounded border bg-background px-2.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveEditGoal(g.id)}
+                        className="grid size-8 place-items-center rounded bg-primary text-primary-foreground hover:bg-primary-hover transition-colors"
+                      >
+                        <Check className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingGoalId(null)}
+                        className="grid size-8 place-items-center rounded border text-muted-foreground hover:bg-elevated transition-colors"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li key={g.id} className="group flex items-center justify-between rounded-lg px-2 hover:bg-elevated">
+                    <label className="flex min-h-11 flex-1 cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={g.done}
+                        onChange={() => setGoals(goals.map((x) => (x.id === g.id ? { ...x, done: !x.done } : x)))}
+                        className="peer sr-only"
+                      />
+                      <span
+                        className={cn(
+                          "grid size-5 shrink-0 place-items-center rounded-md border-2 peer-focus-visible:ring-2 peer-focus-visible:ring-ring",
+                          g.done ? "border-success bg-success text-background" : "border-border",
+                        )}
+                      >
+                        {g.done && <Check className="size-3.5" strokeWidth={3} />}
+                      </span>
+                      <span className={cn("flex-1", g.done && "text-muted-foreground line-through")}>{g.text}</span>
+                      {g.time && <span className="text-xs text-muted-foreground tabular-nums">{g.time}</span>}
+                    </label>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingGoalId(g.id);
+                          setEditingGoalText(g.text);
+                        }}
+                        className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                        aria-label={`Edit ${g.text}`}
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={() => removeGoal(g.id)}
+                        className="p-1 text-muted-foreground hover:text-danger transition-colors"
+                        aria-label={`Delete ${g.text}`}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
           <form

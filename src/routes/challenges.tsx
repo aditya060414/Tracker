@@ -23,6 +23,8 @@ import {
   ChevronUp,
   ChevronDown,
   ArrowUpDown,
+  Pencil,
+  Check,
 } from "lucide-react";
 import { PageHeader, Panel, SectionHeader, ProgressBar, Tag, EmptyState } from "@/components/common/ui";
 import {
@@ -137,6 +139,7 @@ function Challenges() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   // Form State for Custom Challenge
+  const [editingCustomId, setEditingCustomId] = useState<string | null>(null);
   const [customName, setCustomName] = useState("");
   const [customDays, setCustomDays] = useState(30);
   const [customLevel, setCustomLevel] = useState<"Easy" | "Medium" | "Hard">("Medium");
@@ -146,6 +149,14 @@ function Challenges() {
     "Read 10 Pages",
   ]);
   const [newReqInput, setNewReqInput] = useState("");
+  const [editingCustomReqIdx, setEditingCustomReqIdx] = useState<number | null>(null);
+  const [editingCustomReqText, setEditingCustomReqText] = useState("");
+
+  // State for adding & editing Active Challenge requirements
+  const [showAddActiveReq, setShowAddActiveReq] = useState(false);
+  const [newActiveReqInput, setNewActiveReqInput] = useState("");
+  const [editingActiveReqIdx, setEditingActiveReqIdx] = useState<number | null>(null);
+  const [editingActiveReqText, setEditingActiveReqText] = useState("");
 
   const effectiveReqs = activeReqs && activeReqs.length > 0 ? activeReqs : defaultPresetReqs;
   const allDone = effectiveReqs.length > 0 && checked.length === effectiveReqs.length;
@@ -406,6 +417,131 @@ function Challenges() {
     }).catch(() => {});
   };
 
+  // --- Active Requirements Add / Edit / Delete Handlers ---
+  const handleAddActiveReq = (text?: string) => {
+    const val = (text ?? newActiveReqInput).trim();
+    if (!val) return;
+    if (effectiveReqs.includes(val)) {
+      toast.info("This requirement already exists in your daily list.");
+      return;
+    }
+    const updated = [...effectiveReqs, val];
+    setActiveReqs(updated);
+    setNewActiveReqInput("");
+    setShowAddActiveReq(false);
+    toast.success(`Added "${val}" to today's requirements!`);
+
+    const userId = getEffectiveUserId();
+    fetch("/api/challenges/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        activeName,
+        totalDays,
+        day,
+        streak,
+        checked,
+        activeReqs: updated,
+        history,
+      }),
+    }).catch(() => {});
+  };
+
+  const handleSaveEditActiveReq = (index: number) => {
+    const trimmed = editingActiveReqText.trim();
+    if (!trimmed) {
+      toast.error("Requirement cannot be empty.");
+      return;
+    }
+    const oldReq = effectiveReqs[index];
+    if (trimmed === oldReq) {
+      setEditingActiveReqIdx(null);
+      return;
+    }
+    const updated = [...effectiveReqs];
+    updated[index] = trimmed;
+    setActiveReqs(updated);
+
+    let updatedChecked = checked;
+    if (oldReq && checked.includes(oldReq)) {
+      updatedChecked = checked.map((c) => (c === oldReq ? trimmed : c));
+      setChecked(updatedChecked);
+    }
+
+    setEditingActiveReqIdx(null);
+    setEditingActiveReqText("");
+    toast.success("Requirement updated!");
+
+    const userId = getEffectiveUserId();
+    fetch("/api/challenges/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        activeName,
+        totalDays,
+        day,
+        streak,
+        checked: updatedChecked,
+        activeReqs: updated,
+        history,
+      }),
+    }).catch(() => {});
+  };
+
+  const handleDeleteActiveReq = (index: number) => {
+    const toDelete = effectiveReqs[index];
+    if (effectiveReqs.length <= 1) {
+      toast.error("Challenge must have at least one requirement.");
+      return;
+    }
+    const updated = effectiveReqs.filter((_, i) => i !== index);
+    const updatedChecked = checked.filter((c) => c !== toDelete);
+    setActiveReqs(updated);
+    setChecked(updatedChecked);
+    toast.info("Requirement removed.");
+
+    const userId = getEffectiveUserId();
+    fetch("/api/challenges/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        activeName,
+        totalDays,
+        day,
+        streak,
+        checked: updatedChecked,
+        activeReqs: updated,
+        history,
+      }),
+    }).catch(() => {});
+  };
+
+  // --- Custom Challenge Modal Handlers ---
+  const openCreateModal = () => {
+    setEditingCustomId(null);
+    setCustomName("");
+    setCustomDays(30);
+    setCustomLevel("Medium");
+    setCustomReqs(["Drink 2.5L Water", "30-Min Workout", "Read 10 Pages"]);
+    setNewReqInput("");
+    setEditingCustomReqIdx(null);
+    setIsCreateOpen(true);
+  };
+
+  const openEditModal = (c: CustomChallenge) => {
+    setEditingCustomId(c.id);
+    setCustomName(c.name);
+    setCustomDays(c.days);
+    setCustomLevel(c.level);
+    setCustomReqs([...c.reqs]);
+    setNewReqInput("");
+    setEditingCustomReqIdx(null);
+    setIsCreateOpen(true);
+  };
+
   const handleAddReq = (text?: string) => {
     const val = (text ?? newReqInput).trim();
     if (!val) return;
@@ -415,6 +551,16 @@ function Challenges() {
     }
     setCustomReqs([...customReqs, val]);
     if (!text) setNewReqInput("");
+  };
+
+  const handleSaveCustomReqEdit = (index: number) => {
+    const trimmed = editingCustomReqText.trim();
+    if (!trimmed) return;
+    const updated = [...customReqs];
+    updated[index] = trimmed;
+    setCustomReqs(updated);
+    setEditingCustomReqIdx(null);
+    setEditingCustomReqText("");
   };
 
   const handleRemoveReq = (index: number) => {
@@ -433,6 +579,63 @@ function Challenges() {
     }
     if (customReqs.length === 0) {
       toast.error("Please add at least one daily requirement.");
+      return;
+    }
+
+    const userId = getEffectiveUserId();
+
+    if (editingCustomId) {
+      const existing = customList.find((c) => c.id === editingCustomId);
+      const originalName = existing?.name;
+      const updatedChallenge: CustomChallenge = {
+        id: editingCustomId,
+        name: trimmedName,
+        days: Number(customDays),
+        level: customLevel,
+        reqs: customReqs,
+        createdAt: existing?.createdAt || new Date().toISOString(),
+      };
+
+      setCustomList(customList.map((c) => (c.id === editingCustomId ? updatedChallenge : c)));
+      setIsCreateOpen(false);
+
+      // Direct save to MongoDB database
+      try {
+        await fetch("/api/challenges/custom", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, challenge: updatedChallenge }),
+        });
+        toast.success(`Custom challenge "${updatedChallenge.name}" updated in MongoDB database!`);
+      } catch {
+        toast.success(`Custom challenge "${updatedChallenge.name}" updated!`);
+      }
+
+      // If this was the active challenge, update active challenge as well
+      if (activeName === originalName || activeName === updatedChallenge.name) {
+        setActiveName(updatedChallenge.name);
+        setTotalDays(updatedChallenge.days);
+        setActiveReqs(updatedChallenge.reqs);
+
+        fetch("/api/challenges/take", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            activeName: updatedChallenge.name,
+            totalDays: updatedChallenge.days,
+            day,
+            streak,
+            checked: checked.filter((r) => updatedChallenge.reqs.includes(r)),
+            activeReqs: updatedChallenge.reqs,
+            history,
+          }),
+        }).catch(() => {});
+      }
+
+      if (startImmediately) {
+        startChallenge(updatedChallenge.name, updatedChallenge.days, updatedChallenge.reqs);
+      }
       return;
     }
 
@@ -457,7 +660,6 @@ function Challenges() {
     setNewReqInput("");
 
     // 2. Direct save to MongoDB database
-    const userId = getEffectiveUserId();
     try {
       const res = await fetch("/api/challenges/custom", {
         method: "POST",
@@ -518,7 +720,7 @@ function Challenges() {
               </button>
             )}
             <button
-              onClick={() => setIsCreateOpen(true)}
+              onClick={openCreateModal}
               className="flex items-center gap-1.5 rounded-[10px] bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover transition-colors"
             >
               <Plus className="size-4" /> Create Custom Challenge
@@ -593,62 +795,169 @@ function Challenges() {
                   </span>
                 </div>
 
-                {effectiveReqs.length > 1 && (
-                  <div className="relative">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddActiveReq(!showAddActiveReq);
+                      setEditingActiveReqIdx(null);
+                    }}
+                    className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+                    title="Add new requirement to this challenge"
+                  >
+                    <Plus className="size-3" />
+                    <span>Add Task</span>
+                  </button>
+
+                  {effectiveReqs.length > 1 && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setOrderMenuOpen(!orderMenuOpen)}
+                        className="flex items-center gap-1 rounded-md border border-border/80 bg-elevated/70 px-2 py-1 text-xs font-medium text-foreground hover:bg-elevated transition-colors"
+                        title="Shuffle & reorder challenge tasks"
+                      >
+                        <Shuffle className="size-3 text-primary" />
+                        <span>Shuffle / Order</span>
+                      </button>
+
+                      {orderMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-30 w-48 rounded-xl border bg-popover p-1.5 shadow-xl text-xs space-y-0.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleShuffleActiveReqs();
+                              setOrderMenuOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                          >
+                            <Shuffle className="size-3.5 text-primary" />
+                            <span>Shuffle randomly</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleSortActiveReqsPendingFirst();
+                              setOrderMenuOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                          >
+                            <CheckCircle2 className="size-3.5 text-warning" />
+                            <span>Pending tasks first</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleReverseActiveReqs();
+                              setOrderMenuOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                          >
+                            <ArrowUpDown className="size-3.5 text-muted-foreground" />
+                            <span>Reverse order</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Inline Add Requirement Form */}
+              {showAddActiveReq && (
+                <div className="mb-3 rounded-lg border border-primary/30 bg-elevated/70 p-2.5 text-xs space-y-2">
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={newActiveReqInput}
+                      onChange={(e) => setNewActiveReqInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddActiveReq();
+                        } else if (e.key === "Escape") {
+                          setShowAddActiveReq(false);
+                        }
+                      }}
+                      placeholder="e.g. 10k Steps, Cold Shower, Read 15 Pages..."
+                      className="h-8 flex-1 rounded border bg-background px-2.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      autoFocus
+                    />
                     <button
                       type="button"
-                      onClick={() => setOrderMenuOpen(!orderMenuOpen)}
-                      className="flex items-center gap-1 rounded-md border border-border/80 bg-elevated/70 px-2 py-1 text-xs font-medium text-foreground hover:bg-elevated transition-colors"
-                      title="Shuffle & reorder challenge tasks"
+                      onClick={() => handleAddActiveReq()}
+                      className="rounded bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary-hover transition-colors"
                     >
-                      <Shuffle className="size-3 text-primary" />
-                      <span>Shuffle / Order</span>
+                      Add
                     </button>
-
-                    {orderMenuOpen && (
-                      <div className="absolute right-0 top-full mt-1 z-30 w-48 rounded-xl border bg-popover p-1.5 shadow-xl text-xs space-y-0.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleShuffleActiveReqs();
-                            setOrderMenuOpen(false);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
-                        >
-                          <Shuffle className="size-3.5 text-primary" />
-                          <span>Shuffle randomly</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleSortActiveReqsPendingFirst();
-                            setOrderMenuOpen(false);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
-                        >
-                          <CheckCircle2 className="size-3.5 text-warning" />
-                          <span>Pending tasks first</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleReverseActiveReqs();
-                            setOrderMenuOpen(false);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
-                        >
-                          <ArrowUpDown className="size-3.5 text-muted-foreground" />
-                          <span>Reverse order</span>
-                        </button>
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowAddActiveReq(false)}
+                      className="rounded border px-2.5 py-1 text-xs text-muted-foreground hover:bg-card transition-colors"
+                    >
+                      Cancel
+                    </button>
                   </div>
-                )}
-              </div>
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    <span className="text-[10px] text-muted-foreground mr-1 self-center">Quick add:</span>
+                    {SUGGESTIONS.filter((s) => !effectiveReqs.includes(s)).slice(0, 5).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => handleAddActiveReq(s)}
+                        className="rounded-full border border-border/80 bg-background px-2 py-0.5 text-[10px] text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+                      >
+                        + {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1">
                 {effectiveReqs.map((r, idx) => {
                   const on = checked.includes(r);
+                  if (editingActiveReqIdx === idx) {
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-1.5 rounded-lg border border-primary/50 bg-accent/20 p-1.5 transition-all"
+                      >
+                        <input
+                          type="text"
+                          value={editingActiveReqText}
+                          onChange={(e) => setEditingActiveReqText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleSaveEditActiveReq(idx);
+                            } else if (e.key === "Escape") {
+                              setEditingActiveReqIdx(null);
+                            }
+                          }}
+                          className="h-8 flex-1 rounded border bg-background px-2.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditActiveReq(idx)}
+                          title="Save changes"
+                          className="grid size-8 place-items-center rounded bg-primary text-primary-foreground hover:bg-primary-hover transition-colors"
+                        >
+                          <Check className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingActiveReqIdx(null)}
+                          title="Cancel edit"
+                          className="grid size-8 place-items-center rounded border text-muted-foreground hover:bg-elevated transition-colors"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={r}
@@ -692,8 +1001,19 @@ function Challenges() {
                         <span className={cn("truncate", on && "text-muted-foreground line-through")}>{r}</span>
                       </button>
 
-                      {/* Move up / down controls */}
+                      {/* Move up / down & edit & delete controls */}
                       <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingActiveReqIdx(idx);
+                            setEditingActiveReqText(r);
+                          }}
+                          title="Edit requirement"
+                          className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
                         <button
                           type="button"
                           disabled={idx === 0}
@@ -711,6 +1031,14 @@ function Challenges() {
                           className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
                         >
                           <ChevronDown className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteActiveReq(idx)}
+                          title="Remove requirement"
+                          className="p-1 text-muted-foreground hover:text-danger transition-colors"
+                        >
+                          <Trash2 className="size-3.5" />
                         </button>
                       </div>
                     </div>
@@ -819,7 +1147,7 @@ function Challenges() {
 
               {/* Dashed Create Card */}
               <button
-                onClick={() => setIsCreateOpen(true)}
+                onClick={openCreateModal}
                 className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-elevated/30 p-4 text-center transition-all hover:border-primary hover:bg-primary/5 min-h-[140px]"
               >
                 <div className="grid size-9 place-items-center rounded-full bg-primary/10 text-primary">
@@ -842,7 +1170,7 @@ function Challenges() {
                     Design a challenge tailored to your lifestyle with custom duration and specific daily rules.
                   </p>
                   <button
-                    onClick={() => setIsCreateOpen(true)}
+                    onClick={openCreateModal}
                     className="mt-4 inline-flex items-center gap-1.5 rounded-[10px] bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground hover:bg-primary-hover shadow-sm"
                   >
                     <Plus className="size-3.5" /> Create your first challenge
@@ -874,11 +1202,18 @@ function Challenges() {
                             >
                               {c.level}
                             </span>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <span className="flex items-center gap-1 rounded-full bg-success/10 border border-success/20 px-2 py-0.5 text-[10px] font-medium text-success">
                                 <Database className="size-2.5" /> Database
                               </span>
                               <span className="text-xs text-muted-foreground font-mono">{c.days} days</span>
+                              <button
+                                onClick={() => openEditModal(c)}
+                                title="Edit custom challenge"
+                                className="grid size-6 place-items-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                              >
+                                <Pencil className="size-3.5" />
+                              </button>
                               <button
                                 onClick={() => handleDeleteCustom(c.id, c.name)}
                                 title="Delete custom challenge"
@@ -923,7 +1258,7 @@ function Challenges() {
 
                   {/* Quick Add Custom Card */}
                   <button
-                    onClick={() => setIsCreateOpen(true)}
+                    onClick={openCreateModal}
                     className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-elevated/30 p-4 text-center transition-all hover:border-primary hover:bg-primary/5 min-h-[140px]"
                   >
                     <div className="grid size-9 place-items-center rounded-full bg-primary/10 text-primary">
@@ -961,10 +1296,13 @@ function Challenges() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="size-5 text-primary" /> Create Custom Challenge
+              <Sparkles className="size-5 text-primary" />
+              {editingCustomId ? "Edit Custom Challenge" : "Create Custom Challenge"}
             </DialogTitle>
             <DialogDescription>
-              Set your target duration, difficulty, and the daily requirements you must complete every day.
+              {editingCustomId
+                ? `Update duration, difficulty, or edit, add, and reorder daily requirements for "${customName}".`
+                : "Set your target duration, difficulty, and the daily requirements you must complete every day."}
             </DialogDescription>
             <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-success/30 bg-success/10 px-2.5 py-1 text-xs text-success font-medium">
               <Database className="size-3.5 shrink-0" />
@@ -1114,68 +1452,122 @@ function Challenges() {
                     No requirements added yet. Type a rule or select a suggestion above.
                   </p>
                 ) : (
-                  customReqs.map((req, idx) => (
-                    <div
-                      key={idx}
-                      draggable
-                      onDragStart={(e) => {
-                        setDraggedCustomReqIdx(idx);
-                        e.dataTransfer.effectAllowed = "move";
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "move";
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        if (draggedCustomReqIdx !== null && draggedCustomReqIdx !== idx) {
-                          moveCustomReq(draggedCustomReqIdx, idx);
-                          setDraggedCustomReqIdx(null);
-                        }
-                      }}
-                      onDragEnd={() => setDraggedCustomReqIdx(null)}
-                      className={cn(
-                        "group flex items-center justify-between rounded-lg bg-card px-2.5 py-1.5 text-xs border shadow-2xs transition-all",
-                        draggedCustomReqIdx === idx ? "opacity-40 border-primary" : "hover:border-border/80",
-                      )}
-                    >
-                      <span className="flex items-center gap-2 min-w-0 flex-1 pr-2">
-                        <span title="Drag to reorder" className="shrink-0 flex items-center">
-                          <GripVertical className="size-3 text-muted-foreground/50 hover:text-foreground cursor-grab active:cursor-grabbing" />
+                  customReqs.map((req, idx) => {
+                    if (editingCustomReqIdx === idx) {
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-1.5 rounded-lg border border-primary/50 bg-accent/20 p-1.5 text-xs transition-all"
+                        >
+                          <input
+                            type="text"
+                            value={editingCustomReqText}
+                            onChange={(e) => setEditingCustomReqText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleSaveCustomReqEdit(idx);
+                              } else if (e.key === "Escape") {
+                                setEditingCustomReqIdx(null);
+                              }
+                            }}
+                            className="h-7 flex-1 rounded border bg-background px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveCustomReqEdit(idx)}
+                            title="Save requirement"
+                            className="grid size-7 place-items-center rounded bg-primary text-primary-foreground hover:bg-primary-hover transition-colors"
+                          >
+                            <Check className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingCustomReqIdx(null)}
+                            title="Cancel"
+                            className="grid size-7 place-items-center rounded border text-muted-foreground hover:bg-elevated transition-colors"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={idx}
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggedCustomReqIdx(idx);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedCustomReqIdx !== null && draggedCustomReqIdx !== idx) {
+                            moveCustomReq(draggedCustomReqIdx, idx);
+                            setDraggedCustomReqIdx(null);
+                          }
+                        }}
+                        onDragEnd={() => setDraggedCustomReqIdx(null)}
+                        className={cn(
+                          "group flex items-center justify-between rounded-lg bg-card px-2.5 py-1.5 text-xs border shadow-2xs transition-all",
+                          draggedCustomReqIdx === idx ? "opacity-40 border-primary" : "hover:border-border/80",
+                        )}
+                      >
+                        <span className="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                          <span title="Drag to reorder" className="shrink-0 flex items-center">
+                            <GripVertical className="size-3 text-muted-foreground/50 hover:text-foreground cursor-grab active:cursor-grabbing" />
+                          </span>
+                          <CheckCircle2 className="size-3.5 text-primary shrink-0" />
+                          <span className="font-medium truncate">{req}</span>
                         </span>
-                        <CheckCircle2 className="size-3.5 text-primary shrink-0" />
-                        <span className="font-medium truncate">{req}</span>
-                      </span>
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        <button
-                          type="button"
-                          disabled={idx === 0}
-                          onClick={() => moveCustomReq(idx, idx - 1)}
-                          title="Move up"
-                          className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:pointer-events-none transition-colors"
-                        >
-                          <ChevronUp className="size-3" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={idx === customReqs.length - 1}
-                          onClick={() => moveCustomReq(idx, idx + 1)}
-                          title="Move down"
-                          className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:pointer-events-none transition-colors"
-                        >
-                          <ChevronDown className="size-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveReq(idx)}
-                          className="text-muted-foreground hover:text-danger p-0.5 rounded transition-colors ml-1"
-                          title="Remove requirement"
-                        >
-                          <X className="size-3.5" />
-                        </button>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCustomReqIdx(idx);
+                              setEditingCustomReqText(req);
+                            }}
+                            title="Edit requirement"
+                            className="rounded p-0.5 text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            <Pencil className="size-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => moveCustomReq(idx, idx - 1)}
+                            title="Move up"
+                            className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:pointer-events-none transition-colors"
+                          >
+                            <ChevronUp className="size-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === customReqs.length - 1}
+                            onClick={() => moveCustomReq(idx, idx + 1)}
+                            title="Move down"
+                            className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:pointer-events-none transition-colors"
+                          >
+                            <ChevronDown className="size-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveReq(idx)}
+                            className="text-muted-foreground hover:text-danger p-0.5 rounded transition-colors ml-1"
+                            title="Remove requirement"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -1194,14 +1586,14 @@ function Challenges() {
               onClick={() => handleSaveCustom(false)}
               className="h-10 rounded-[10px] border border-primary/30 bg-primary/10 px-4 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
             >
-              Save to Catalog
+              {editingCustomId ? "Update Challenge" : "Save to Catalog"}
             </button>
             <button
               type="button"
               onClick={() => handleSaveCustom(true)}
               className="flex h-10 items-center justify-center gap-1.5 rounded-[10px] bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover transition-colors"
             >
-              Save & Start Now <ChevronRight className="size-4" />
+              {editingCustomId ? "Update & Start Now" : "Save & Start Now"} <ChevronRight className="size-4" />
             </button>
           </DialogFooter>
         </DialogContent>
