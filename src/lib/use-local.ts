@@ -1,33 +1,49 @@
 import { useEffect, useState, useRef } from "react";
 
 /**
- * Persisted state scoped to the authenticated user's MongoDB ID.
- * Automatically links data to the Mongo user ID and syncs with the MongoDB backend.
+ * Returns the effective user identifier for MongoDB sync.
+ * If logged in, returns the authenticated MongoDB user ID.
+ * If not logged in, returns or generates a persistent device guest ID.
+ */
+export function getEffectiveUserId(): string {
+  if (typeof window === "undefined" || !window.localStorage) return "guest_user";
+  try {
+    const raw = localStorage.getItem("lifeboard_auth_user");
+    if (raw) {
+      const u = JSON.parse(raw);
+      if (u?.id) return u.id;
+    }
+  } catch {}
+
+  let guestId = localStorage.getItem("lifeboard_guest_id");
+  if (!guestId) {
+    guestId = "guest_" + Math.random().toString(36).substring(2, 9) + "_" + Date.now().toString(36);
+    try {
+      localStorage.setItem("lifeboard_guest_id", guestId);
+    } catch {}
+  }
+  return guestId;
+}
+
+/**
+ * Persisted state scoped to the user ID and automatically synced with MongoDB.
+ * Works seamlessly for both authenticated users and guest sessions.
  */
 export function useLocal<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(initial);
   const [ready, setReady] = useState(false);
   const activeUserIdRef = useRef<string | null>(null);
 
-  // Helper to get current MongoDB user ID if logged in
-  const getUserId = (): string | null => {
-    if (typeof window === "undefined" || !window.localStorage) return null;
-    try {
-      const raw = localStorage.getItem("lifeboard_auth_user");
-      if (raw) {
-        const u = JSON.parse(raw);
-        return u?.id || null;
-      }
-    } catch {}
-    return null;
-  };
-
   const getScopedKey = (userId: string | null) => {
-    return userId ? `u_${userId}_${key}` : key;
+    // If authenticated user with a Mongo ID, use scoped key; otherwise use base key
+    if (userId && !userId.startsWith("guest_")) {
+      return `u_${userId}_${key}`;
+    }
+    return key;
   };
 
   useEffect(() => {
-    const userId = getUserId();
+    const userId = getEffectiveUserId();
     activeUserIdRef.current = userId;
     const scopedKey = getScopedKey(userId);
 
@@ -36,6 +52,14 @@ export function useLocal<T>(key: string, initial: T) {
       const raw = localStorage.getItem(scopedKey);
       if (raw !== null) {
         setValue(JSON.parse(raw));
+      } else if (scopedKey !== key) {
+        // Fallback to unscoped key if user just logged in or migrated
+        const unscopedRaw = localStorage.getItem(key);
+        if (unscopedRaw !== null) {
+          setValue(JSON.parse(unscopedRaw));
+        } else {
+          setValue(initial);
+        }
       } else {
         setValue(initial);
       }
@@ -44,7 +68,7 @@ export function useLocal<T>(key: string, initial: T) {
     }
     setReady(true);
 
-    // 2. If logged in with MongoDB ID, also fetch remote linked data
+    // 2. Fetch remote linked data from MongoDB
     if (userId) {
       fetch(`/api/tracker?userId=${encodeURIComponent(userId)}`)
         .then((res) => (res.ok ? res.json() : null))
@@ -67,7 +91,7 @@ export function useLocal<T>(key: string, initial: T) {
 
   useEffect(() => {
     if (!ready) return;
-    const userId = activeUserIdRef.current || getUserId();
+    const userId = activeUserIdRef.current || getEffectiveUserId();
     const scopedKey = getScopedKey(userId);
 
     // Save locally
@@ -75,7 +99,7 @@ export function useLocal<T>(key: string, initial: T) {
       localStorage.setItem(scopedKey, JSON.stringify(value));
     } catch {}
 
-    // If linked to MongoDB ID, sync remotely in background
+    // If we have a user ID (auth or guest), sync remotely in background to MongoDB
     if (!userId) {
       return undefined;
     }

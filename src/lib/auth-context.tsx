@@ -75,6 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
       localStorage.setItem("profile-name", newUser.name);
 
+      // Migrate any guest challenges/data to this authenticated user account
+      const guestId = localStorage.getItem("lifeboard_guest_id");
+      if (guestId && guestId !== newUser.id) {
+        fetch("/api/challenges/migrate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ guestId, authUserId: newUser.id }),
+        }).catch(() => {});
+      }
+
       toast.success(`Welcome to Lifeboard, ${newUser.name}!`, {
         description: "Your account has been created and synced successfully.",
       });
@@ -109,6 +119,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(loggedUser);
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
       localStorage.setItem("profile-name", loggedUser.name);
+
+      // Migrate any guest challenges/data to this authenticated user account
+      const guestId = localStorage.getItem("lifeboard_guest_id");
+      if (guestId && guestId !== loggedUser.id) {
+        fetch("/api/challenges/migrate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ guestId, authUserId: loggedUser.id }),
+        }).catch(() => {});
+      }
 
       toast.success(`Welcome back, ${loggedUser.name}!`, {
         description: `Signed in as ${loggedUser.email}`,

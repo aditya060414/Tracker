@@ -1,6 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Mountain, CalendarRange, Sun, Grid2x2, Flag, NotebookPen, Plus, Trash2, Check } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Mountain,
+  CalendarRange,
+  Sun,
+  Grid2x2,
+  Flag,
+  NotebookPen,
+  Plus,
+  Trash2,
+  Check,
+  Shuffle,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  ArrowUpDown,
+} from "lucide-react";
 import { PageHeader, Panel, SectionHeader, ProgressBar, Tag, EmptyState } from "@/components/common/ui";
 import { useLocal } from "@/lib/use-local";
 import { pageHead } from "@/lib/meta";
@@ -10,6 +26,17 @@ export const Route = createFileRoute("/planning")({
   head: pageHead("Planning", "Monthly objectives, weekly outcomes, daily plans and a priority matrix."),
   component: Planning,
 });
+
+function shuffleArray<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = result[i]!;
+    result[i] = result[j]!;
+    result[j] = temp;
+  }
+  return result;
+}
 
 export type Goal = { id: string; text: string; done: boolean; time?: string | undefined };
 type Objective = { id: string; name: string; pct: number };
@@ -51,6 +78,72 @@ function Planning() {
 
   const [newMilestoneDate, setNewMilestoneDate] = useState("");
   const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
+
+  // Reorder & shuffle states
+  const [draggedGoalIdx, setDraggedGoalIdx] = useState<number | null>(null);
+  const [draggedOutcomeIdx, setDraggedOutcomeIdx] = useState<number | null>(null);
+  const [goalsOrderMenuOpen, setGoalsOrderMenuOpen] = useState(false);
+
+  const moveGoal = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= goals.length) return;
+    const updated = [...goals];
+    const [moved] = updated.splice(fromIndex, 1);
+    if (!moved) return;
+    updated.splice(toIndex, 0, moved);
+    setGoals(updated);
+    toast.success("Goal order updated.");
+  };
+
+  const handleShuffleGoals = () => {
+    if (goals.length < 2) {
+      toast.info("Add at least 2 goals to shuffle.");
+      return;
+    }
+    const shuffled = shuffleArray(goals);
+    setGoals(shuffled);
+    toast.success("Daily goals shuffled!");
+  };
+
+  const handleSortGoalsPendingFirst = () => {
+    const sorted = [...goals].sort((a, b) => Number(a.done) - Number(b.done));
+    setGoals(sorted);
+    toast.success("Pending goals moved to top!");
+  };
+
+  const handleSortGoalsByTime = () => {
+    const sorted = [...goals].sort((a, b) => {
+      if (!a.time && !b.time) return 0;
+      if (!a.time) return 1;
+      if (!b.time) return -1;
+      return a.time.localeCompare(b.time);
+    });
+    setGoals(sorted);
+    toast.success("Goals sorted by time!");
+  };
+
+  const handleReverseGoals = () => {
+    setGoals([...goals].reverse());
+    toast.success("Goals order reversed!");
+  };
+
+  const moveOutcome = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= outcomes.length) return;
+    const updated = [...outcomes];
+    const [moved] = updated.splice(fromIndex, 1);
+    if (!moved) return;
+    updated.splice(toIndex, 0, moved);
+    setOutcomes(updated);
+    toast.success("Outcome reordered.");
+  };
+
+  const handleShuffleOutcomes = () => {
+    if (outcomes.length < 2) {
+      toast.info("Add at least 2 outcomes to shuffle.");
+      return;
+    }
+    setOutcomes(shuffleArray(outcomes));
+    toast.success("Weekly outcomes shuffled!");
+  };
 
   // Seamlessly migrate any legacy planning-today-plan items into shared goals
   useEffect(() => {
@@ -220,7 +313,26 @@ function Planning() {
 
         {/* Weekly outcomes */}
         <Panel>
-          <SectionHeader title="This week's outcomes" icon={CalendarRange} action={<Tag tone="primary">Weekly</Tag>} />
+          <SectionHeader
+            title="This week's outcomes"
+            icon={CalendarRange}
+            action={
+              <div className="flex items-center gap-1.5">
+                {outcomes.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleShuffleOutcomes}
+                    title="Shuffle weekly outcomes order"
+                    className="flex items-center gap-1 rounded border border-border/80 bg-elevated/60 px-2 py-0.5 text-xs text-muted-foreground hover:bg-elevated hover:text-foreground transition-colors"
+                  >
+                    <Shuffle className="size-3 text-primary" />
+                    <span>Shuffle</span>
+                  </button>
+                )}
+                <Tag tone="primary">Weekly</Tag>
+              </div>
+            }
+          />
           <form onSubmit={addOutcome} className="mb-3 flex gap-2">
             <input
               value={newOutcome}
@@ -236,16 +348,61 @@ function Planning() {
           {outcomes.length === 0 ? (
             <EmptyState text="No outcomes planned for this week yet." />
           ) : (
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-1.5 text-sm">
               {outcomes.map((item, idx) => (
-                <li key={idx} className="group flex items-center justify-between gap-2 border-b pb-1.5 last:border-b-0">
-                  <span className="flex-1">• {item}</span>
-                  <button
-                    onClick={() => setOutcomes(outcomes.filter((_, i) => i !== idx))}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
+                <li
+                  key={idx}
+                  draggable
+                  onDragStart={() => setDraggedOutcomeIdx(idx)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (draggedOutcomeIdx !== null && draggedOutcomeIdx !== idx) {
+                      moveOutcome(draggedOutcomeIdx, idx);
+                    }
+                    setDraggedOutcomeIdx(null);
+                  }}
+                  onDragEnd={() => setDraggedOutcomeIdx(null)}
+                  className={cn(
+                    "group flex items-center justify-between gap-2 border-b pb-1.5 last:border-b-0 rounded px-1.5 py-1 transition-colors hover:bg-elevated/40",
+                    draggedOutcomeIdx === idx && "opacity-40 border border-dashed border-primary",
+                  )}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span
+                      className="cursor-grab text-muted-foreground/40 hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
+                      title="Drag to reorder"
+                    >
+                      <GripVertical className="size-3.5" />
+                    </span>
+                    <span className="truncate">• {item}</span>
+                  </div>
+                  <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => moveOutcome(idx, idx - 1)}
+                      title="Move up"
+                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                    >
+                      <ChevronUp className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === outcomes.length - 1}
+                      onClick={() => moveOutcome(idx, idx + 1)}
+                      title="Move down"
+                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                    >
+                      <ChevronDown className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setOutcomes(outcomes.filter((_, i) => i !== idx))}
+                      className="p-1 text-muted-foreground hover:text-danger transition-colors"
+                      title="Delete outcome"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -258,10 +415,71 @@ function Planning() {
             title="Today's daily goals"
             icon={Sun}
             action={
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground font-medium">
                   {goals.filter((g) => g.done).length}/{goals.length} done
                 </span>
+                {goals.length > 1 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setGoalsOrderMenuOpen(!goalsOrderMenuOpen)}
+                      className="flex items-center gap-1 rounded-md border border-border/80 bg-elevated/70 px-2 py-0.5 text-xs font-medium text-foreground hover:bg-elevated transition-colors"
+                      title="Shuffle & reorder goals"
+                    >
+                      <Shuffle className="size-3 text-primary" />
+                      <span>Shuffle / Order</span>
+                    </button>
+                    {goalsOrderMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-30 w-44 rounded-xl border bg-popover p-1.5 shadow-xl text-xs space-y-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleShuffleGoals();
+                            setGoalsOrderMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                        >
+                          <Shuffle className="size-3.5 text-primary" />
+                          <span>Shuffle randomly</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSortGoalsPendingFirst();
+                            setGoalsOrderMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                        >
+                          <Check className="size-3.5 text-warning" />
+                          <span>Pending first</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSortGoalsByTime();
+                            setGoalsOrderMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                        >
+                          <Sun className="size-3.5 text-primary" />
+                          <span>Sort by time</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleReverseGoals();
+                            setGoalsOrderMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                        >
+                          <ArrowUpDown className="size-3.5 text-muted-foreground" />
+                          <span>Reverse order</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <Tag tone="success">Daily</Tag>
               </div>
             }
@@ -293,11 +511,30 @@ function Planning() {
             <EmptyState text="No daily goals set for today. Add one above or from the dashboard." />
           ) : (
             <ul className="space-y-1.5">
-              {goals.map((g) => (
+              {goals.map((g, idx) => (
                 <li
                   key={g.id}
-                  className="group flex min-h-9 items-center justify-between rounded-lg px-2 hover:bg-elevated transition-colors"
+                  draggable
+                  onDragStart={() => setDraggedGoalIdx(idx)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (draggedGoalIdx !== null && draggedGoalIdx !== idx) {
+                      moveGoal(draggedGoalIdx, idx);
+                    }
+                    setDraggedGoalIdx(null);
+                  }}
+                  onDragEnd={() => setDraggedGoalIdx(null)}
+                  className={cn(
+                    "group flex min-h-9 items-center justify-between rounded-lg px-2 hover:bg-elevated transition-colors",
+                    draggedGoalIdx === idx && "opacity-40 border border-dashed border-primary",
+                  )}
                 >
+                  <div
+                    className="mr-1.5 cursor-grab text-muted-foreground/40 hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
+                    title="Drag to reorder"
+                  >
+                    <GripVertical className="size-3.5" />
+                  </div>
                   <label className="flex flex-1 cursor-pointer items-center gap-2.5 py-1">
                     <input
                       type="checkbox"
@@ -324,13 +561,34 @@ function Planning() {
                       {g.text}
                     </span>
                   </label>
-                  <button
-                    onClick={() => removeGoal(g.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-danger transition-opacity"
-                    aria-label={`Delete ${g.text}`}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
+
+                  <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => moveGoal(idx, idx - 1)}
+                      title="Move up"
+                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                    >
+                      <ChevronUp className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === goals.length - 1}
+                      onClick={() => moveGoal(idx, idx + 1)}
+                      title="Move down"
+                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                    >
+                      <ChevronDown className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => removeGoal(g.id)}
+                      className="p-1 text-muted-foreground hover:text-danger transition-colors"
+                      aria-label={`Delete ${g.text}`}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

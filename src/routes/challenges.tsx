@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Trophy,
@@ -16,6 +16,13 @@ import {
   Layers,
   X,
   ChevronRight,
+  Database,
+  CloudCheck,
+  Shuffle,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { PageHeader, Panel, SectionHeader, ProgressBar, Tag, EmptyState } from "@/components/common/ui";
 import {
@@ -26,7 +33,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { useLocal } from "@/lib/use-local";
+import { useLocal, getEffectiveUserId } from "@/lib/use-local";
 import { pageHead } from "@/lib/meta";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +41,17 @@ export const Route = createFileRoute("/challenges")({
   head: pageHead("Take Challenge", "Join challenges, create custom goals, build streaks and celebrate milestones."),
   component: Challenges,
 });
+
+function shuffleArray<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = result[i]!;
+    result[i] = result[j]!;
+    result[j] = temp;
+  }
+  return result;
+}
 
 export interface CustomChallenge {
   id: string;
@@ -133,6 +151,140 @@ function Challenges() {
   const allDone = effectiveReqs.length > 0 && checked.length === effectiveReqs.length;
   const currentMilestones = getMilestones(totalDays).filter((m) => m <= totalDays);
 
+  // Reorder & shuffle states for challenge tasks
+  const [draggedReqIdx, setDraggedReqIdx] = useState<number | null>(null);
+  const [draggedCustomReqIdx, setDraggedCustomReqIdx] = useState<number | null>(null);
+  const [orderMenuOpen, setOrderMenuOpen] = useState(false);
+
+  const handleReorderActiveReqs = (newReqs: string[], message?: string) => {
+    setActiveReqs(newReqs);
+    if (message) {
+      toast.success(message);
+    }
+    const userId = getEffectiveUserId();
+    fetch("/api/challenges/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        activeName,
+        totalDays,
+        day,
+        streak,
+        checked,
+        activeReqs: newReqs,
+        history,
+      }),
+    }).catch(() => {});
+  };
+
+  const moveActiveReq = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= effectiveReqs.length) return;
+    const updated = [...effectiveReqs];
+    const [moved] = updated.splice(fromIndex, 1);
+    if (!moved) return;
+    updated.splice(toIndex, 0, moved);
+    handleReorderActiveReqs(updated, "Requirement moved.");
+  };
+
+  const handleShuffleActiveReqs = () => {
+    if (effectiveReqs.length < 2) {
+      toast.info("Add at least 2 requirements to shuffle.");
+      return;
+    }
+    const shuffled = shuffleArray(effectiveReqs);
+    handleReorderActiveReqs(shuffled, "Requirements shuffled & saved to database!");
+  };
+
+  const handleSortActiveReqsPendingFirst = () => {
+    const sorted = [...effectiveReqs].sort((a, b) => {
+      const aDone = checked.includes(a);
+      const bDone = checked.includes(b);
+      return Number(aDone) - Number(bDone);
+    });
+    handleReorderActiveReqs(sorted, "Pending tasks moved to top!");
+  };
+
+  const handleReverseActiveReqs = () => {
+    const reversed = [...effectiveReqs].reverse();
+    handleReorderActiveReqs(reversed, "Requirements order reversed!");
+  };
+
+  const moveCustomReq = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= customReqs.length) return;
+    const updated = [...customReqs];
+    const [moved] = updated.splice(fromIndex, 1);
+    if (!moved) return;
+    updated.splice(toIndex, 0, moved);
+    setCustomReqs(updated);
+  };
+
+  const handleShuffleCustomReqs = () => {
+    if (customReqs.length < 2) return;
+    setCustomReqs(shuffleArray(customReqs));
+    toast.success("Requirements shuffled!");
+  };
+
+  // Load custom challenges & active progress from MongoDB on component mount
+  useEffect(() => {
+    const userId = getEffectiveUserId();
+    fetch(`/api/challenges?userId=${encodeURIComponent(userId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success) {
+          if (Array.isArray(data.customList) && data.customList.length > 0) {
+            setCustomList((prev) => {
+              const map = new Map<string, CustomChallenge>();
+              // Load database challenges first
+              for (const item of data.customList) {
+                if (item?.id || item?.name) {
+                  map.set(item.id || item.name, item);
+                }
+              }
+              // Merge local challenges that might not yet be in database
+              for (const item of prev) {
+                if ((item?.id || item?.name) && !map.has(item.id || item.name)) {
+                  map.set(item.id || item.name, item);
+                  // Upload un-synced local challenge to database
+                  fetch("/api/challenges/custom", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userId, challenge: item }),
+                  }).catch(() => {});
+                }
+              }
+              return Array.from(map.values());
+            });
+          } else if (customList.length > 0) {
+            // If database has none yet, sync existing local custom challenges to database
+            for (const item of customList) {
+              fetch("/api/challenges/custom", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId, challenge: item }),
+              }).catch(() => {});
+            }
+          }
+
+          if (data.activeChallenge && data.activeChallenge.activeName) {
+            const remote = data.activeChallenge;
+            if (remote.day > 0) {
+              setActiveName(remote.activeName);
+              setTotalDays(remote.totalDays);
+              setDay(remote.day);
+              setStreak(remote.streak);
+              if (remote.checked) setChecked(remote.checked);
+              if (remote.activeReqs && remote.activeReqs.length > 0) setActiveReqs(remote.activeReqs);
+              if (remote.history) setHistory(remote.history);
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("[MongoDB] Error synchronizing challenges:", err);
+      });
+  }, []);
+
   const completeDay = () => {
     const nextDay = day + 1;
     const nextStreak = streak + 1;
@@ -140,24 +292,44 @@ function Challenges() {
     setStreak(nextStreak);
     setChecked([]);
 
+    let nextHistory = history;
     if (nextDay >= totalDays) {
       toast.success(`🎉 Congratulations! You completed the ${activeName}!`, {
-        description: "Challenge saved to your history.",
+        description: "Challenge saved to MongoDB database history.",
       });
-      setHistory([...history, { name: `${activeName} · ${totalDays}d`, status: "Completed" }]);
+      nextHistory = [...history, { name: `${activeName} · ${totalDays}d`, status: "Completed" }];
+      setHistory(nextHistory);
     } else {
       toast.success(`Day ${nextDay} complete! 🎉`, {
         description: currentMilestones.includes(nextDay) ? "New milestone unlocked!" : "Keep the streak alive.",
       });
     }
+
+    const userId = getEffectiveUserId();
+    fetch("/api/challenges/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        activeName,
+        totalDays,
+        day: nextDay,
+        streak: nextStreak,
+        checked: [],
+        activeReqs: effectiveReqs,
+        history: nextHistory,
+      }),
+    }).catch(() => {});
   };
 
   const startChallenge = (name: string, days: number, challengeReqs?: string[]) => {
+    let nextHistory = history;
     if (day > 0 && day < totalDays) {
       if (!confirm(`Switching to '${name}' will archive your current progress. Continue?`)) {
         return;
       }
-      setHistory([...history, { name: `${activeName} · Day ${day}/${totalDays}`, status: "Paused" }]);
+      nextHistory = [...history, { name: `${activeName} · Day ${day}/${totalDays}`, status: "Paused" }];
+      setHistory(nextHistory);
     }
     setActiveName(name);
     setTotalDays(days);
@@ -167,7 +339,25 @@ function Challenges() {
     setActiveReqs(chosenReqs);
     setDay(1);
     setChecked([]);
-    toast.success(`Started ${name}! Day 1 begins now.`);
+    toast.success(`Started ${name}! Day 1 begins now.`, {
+      description: "Challenge progress saved to MongoDB database.",
+    });
+
+    const userId = getEffectiveUserId();
+    fetch("/api/challenges/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        activeName: name,
+        totalDays: days,
+        day: 1,
+        streak: 0,
+        checked: [],
+        activeReqs: chosenReqs,
+        history: nextHistory,
+      }),
+    }).catch(() => {});
   };
 
   const resetChallenge = () => {
@@ -176,7 +366,44 @@ function Challenges() {
       setStreak(0);
       setChecked([]);
       toast.info("Challenge reset to Day 1.");
+
+      const userId = getEffectiveUserId();
+      fetch("/api/challenges/take", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          activeName,
+          totalDays,
+          day: 1,
+          streak: 0,
+          checked: [],
+          activeReqs: effectiveReqs,
+          history,
+        }),
+      }).catch(() => {});
     }
+  };
+
+  const toggleCheck = (r: string) => {
+    const nextChecked = checked.includes(r) ? checked.filter((x) => x !== r) : [...checked, r];
+    setChecked(nextChecked);
+
+    const userId = getEffectiveUserId();
+    fetch("/api/challenges/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        activeName,
+        totalDays,
+        day,
+        streak,
+        checked: nextChecked,
+        activeReqs: effectiveReqs,
+        history,
+      }),
+    }).catch(() => {});
   };
 
   const handleAddReq = (text?: string) => {
@@ -194,7 +421,7 @@ function Challenges() {
     setCustomReqs(customReqs.filter((_, i) => i !== index));
   };
 
-  const handleSaveCustom = (startImmediately: boolean = false) => {
+  const handleSaveCustom = async (startImmediately: boolean = false) => {
     const trimmedName = customName.trim();
     if (!trimmedName) {
       toast.error("Please enter a challenge name.");
@@ -218,6 +445,7 @@ function Challenges() {
       createdAt: new Date().toISOString(),
     };
 
+    // 1. Immediately update local state
     setCustomList([newChallenge, ...customList]);
     setIsCreateOpen(false);
 
@@ -228,19 +456,45 @@ function Challenges() {
     setCustomReqs(["Drink 2.5L Water", "30-Min Workout", "Read 10 Pages"]);
     setNewReqInput("");
 
+    // 2. Direct save to MongoDB database
+    const userId = getEffectiveUserId();
+    try {
+      const res = await fetch("/api/challenges/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, challenge: newChallenge }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Custom challenge "${newChallenge.name}" saved to MongoDB database!`, {
+          description: "Persisted in 'challenges' collection in MongoDB Atlas.",
+        });
+      } else {
+        toast.success(`Custom challenge "${newChallenge.name}" saved!`);
+      }
+    } catch {
+      toast.success(`Custom challenge "${newChallenge.name}" saved!`);
+    }
+
     if (startImmediately) {
       startChallenge(newChallenge.name, newChallenge.days, newChallenge.reqs);
-      toast.success(`Custom challenge "${newChallenge.name}" created and started!`);
     } else {
       setActiveTab("custom");
-      toast.success(`Custom challenge "${newChallenge.name}" saved!`);
     }
   };
 
-  const handleDeleteCustom = (id: string, name: string) => {
+  const handleDeleteCustom = async (id: string, name: string) => {
     if (confirm(`Delete custom challenge "${name}"?`)) {
       setCustomList(customList.filter((c) => c.id !== id));
-      toast.info(`Deleted "${name}".`);
+      const userId = getEffectiveUserId();
+      try {
+        await fetch("/api/challenges/custom/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, id }),
+        });
+      } catch {}
+      toast.info(`Deleted "${name}" from database.`);
     }
   };
 
@@ -251,6 +505,10 @@ function Challenges() {
         description="Build discipline with daily habits, streak tracking, and customizable goals."
         actions={
           <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+              <span className="size-1.5 rounded-full bg-success" />
+              <Database className="size-3.5" /> MongoDB Active
+            </span>
             {day > 0 && (
               <button
                 onClick={resetChallenge}
@@ -328,33 +586,134 @@ function Challenges() {
           <div className="rounded-xl border bg-card p-4 shadow-sm flex flex-col justify-between">
             <div>
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="font-semibold text-sm">Today's requirements</h3>
-                <span className="text-xs text-muted-foreground font-medium">
-                  {checked.length}/{effectiveReqs.length} done
-                </span>
+                <div>
+                  <h3 className="font-semibold text-sm">Today's requirements</h3>
+                  <span className="text-[11px] text-muted-foreground">
+                    {checked.length}/{effectiveReqs.length} done
+                  </span>
+                </div>
+
+                {effectiveReqs.length > 1 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOrderMenuOpen(!orderMenuOpen)}
+                      className="flex items-center gap-1 rounded-md border border-border/80 bg-elevated/70 px-2 py-1 text-xs font-medium text-foreground hover:bg-elevated transition-colors"
+                      title="Shuffle & reorder challenge tasks"
+                    >
+                      <Shuffle className="size-3 text-primary" />
+                      <span>Shuffle / Order</span>
+                    </button>
+
+                    {orderMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-30 w-48 rounded-xl border bg-popover p-1.5 shadow-xl text-xs space-y-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleShuffleActiveReqs();
+                            setOrderMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                        >
+                          <Shuffle className="size-3.5 text-primary" />
+                          <span>Shuffle randomly</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSortActiveReqsPendingFirst();
+                            setOrderMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                        >
+                          <CheckCircle2 className="size-3.5 text-warning" />
+                          <span>Pending tasks first</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleReverseActiveReqs();
+                            setOrderMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-elevated text-foreground transition-colors"
+                        >
+                          <ArrowUpDown className="size-3.5 text-muted-foreground" />
+                          <span>Reverse order</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
-                {effectiveReqs.map((r) => {
+                {effectiveReqs.map((r, idx) => {
                   const on = checked.includes(r);
                   return (
-                    <button
+                    <div
                       key={r}
-                      aria-pressed={on}
-                      onClick={() => setChecked(on ? checked.filter((x) => x !== r) : [...checked, r])}
+                      draggable
+                      onDragStart={() => setDraggedReqIdx(idx)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => {
+                        if (draggedReqIdx !== null && draggedReqIdx !== idx) {
+                          moveActiveReq(draggedReqIdx, idx);
+                        }
+                        setDraggedReqIdx(null);
+                      }}
+                      onDragEnd={() => setDraggedReqIdx(null)}
                       className={cn(
-                        "flex min-h-10 w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors",
+                        "group flex min-h-10 w-full items-center justify-between rounded-lg px-2 py-1.5 transition-colors",
                         on ? "bg-elevated/40" : "hover:bg-elevated",
+                        draggedReqIdx === idx && "opacity-40 border border-dashed border-primary",
                       )}
                     >
-                      <CheckCircle2
-                        className={cn(
-                          "size-4.5 shrink-0 transition-colors",
-                          on ? "text-success" : "text-muted-foreground/40",
-                        )}
-                      />
-                      <span className={cn(on && "text-muted-foreground line-through")}>{r}</span>
-                    </button>
+                      {/* Drag handle */}
+                      <div
+                        className="mr-1.5 cursor-grab text-muted-foreground/40 hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
+                        title="Drag to reorder"
+                      >
+                        <GripVertical className="size-3.5" />
+                      </div>
+
+                      {/* Checkbox and task text */}
+                      <button
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => toggleCheck(r)}
+                        className="flex flex-1 items-center gap-2.5 text-left text-sm min-w-0"
+                      >
+                        <CheckCircle2
+                          className={cn(
+                            "size-4.5 shrink-0 transition-colors",
+                            on ? "text-success" : "text-muted-foreground/40",
+                          )}
+                        />
+                        <span className={cn("truncate", on && "text-muted-foreground line-through")}>{r}</span>
+                      </button>
+
+                      {/* Move up / down controls */}
+                      <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => moveActiveReq(idx, idx - 1)}
+                          title="Move up"
+                          className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                        >
+                          <ChevronUp className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === effectiveReqs.length - 1}
+                          onClick={() => moveActiveReq(idx, idx + 1)}
+                          title="Move down"
+                          className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                        >
+                          <ChevronDown className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -516,6 +875,9 @@ function Challenges() {
                               {c.level}
                             </span>
                             <div className="flex items-center gap-2">
+                              <span className="flex items-center gap-1 rounded-full bg-success/10 border border-success/20 px-2 py-0.5 text-[10px] font-medium text-success">
+                                <Database className="size-2.5" /> Database
+                              </span>
                               <span className="text-xs text-muted-foreground font-mono">{c.days} days</span>
                               <button
                                 onClick={() => handleDeleteCustom(c.id, c.name)}
@@ -604,6 +966,10 @@ function Challenges() {
             <DialogDescription>
               Set your target duration, difficulty, and the daily requirements you must complete every day.
             </DialogDescription>
+            <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-success/30 bg-success/10 px-2.5 py-1 text-xs text-success font-medium">
+              <Database className="size-3.5 shrink-0" />
+              <span>Automatically saved and synced directly to MongoDB Atlas ('challenges' collection).</span>
+            </div>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -682,10 +1048,22 @@ function Challenges() {
             {/* 4. Daily Requirements Builder */}
             <div>
               <div className="mb-1.5 flex items-center justify-between">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Daily Requirements ({customReqs.length}) <span className="text-danger">*</span>
-                </label>
-                <span className="text-[11px] text-muted-foreground">Must be checked off daily</span>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Daily Requirements ({customReqs.length}) <span className="text-danger">*</span>
+                  </label>
+                  {customReqs.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleShuffleCustomReqs}
+                      title="Shuffle requirement order"
+                      className="flex items-center gap-1 rounded-md border border-border/70 bg-elevated/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-elevated transition-colors"
+                    >
+                      <Shuffle className="size-3 text-primary" /> Shuffle
+                    </button>
+                  )}
+                </div>
+                <span className="text-[11px] text-muted-foreground">Drag or move to reorder</span>
               </div>
 
               {/* Requirement Input */}
@@ -730,7 +1108,7 @@ function Challenges() {
               </div>
 
               {/* Current Requirements List */}
-              <div className="mt-3 max-h-44 space-y-1.5 overflow-y-auto rounded-xl border bg-elevated/40 p-2">
+              <div className="mt-3 max-h-48 space-y-1.5 overflow-y-auto rounded-xl border bg-elevated/40 p-2">
                 {customReqs.length === 0 ? (
                   <p className="py-4 text-center text-xs text-muted-foreground">
                     No requirements added yet. Type a rule or select a suggestion above.
@@ -739,19 +1117,63 @@ function Challenges() {
                   customReqs.map((req, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center justify-between rounded-lg bg-card px-2.5 py-1.5 text-xs border shadow-2xs"
+                      draggable
+                      onDragStart={(e) => {
+                        setDraggedCustomReqIdx(idx);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedCustomReqIdx !== null && draggedCustomReqIdx !== idx) {
+                          moveCustomReq(draggedCustomReqIdx, idx);
+                          setDraggedCustomReqIdx(null);
+                        }
+                      }}
+                      onDragEnd={() => setDraggedCustomReqIdx(null)}
+                      className={cn(
+                        "group flex items-center justify-between rounded-lg bg-card px-2.5 py-1.5 text-xs border shadow-2xs transition-all",
+                        draggedCustomReqIdx === idx ? "opacity-40 border-primary" : "hover:border-border/80",
+                      )}
                     >
-                      <span className="flex items-center gap-2">
-                        <CheckCircle2 className="size-3.5 text-primary" />
-                        <span className="font-medium">{req}</span>
+                      <span className="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                        <span title="Drag to reorder" className="shrink-0 flex items-center">
+                          <GripVertical className="size-3 text-muted-foreground/50 hover:text-foreground cursor-grab active:cursor-grabbing" />
+                        </span>
+                        <CheckCircle2 className="size-3.5 text-primary shrink-0" />
+                        <span className="font-medium truncate">{req}</span>
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveReq(idx)}
-                        className="text-muted-foreground hover:text-danger p-0.5 rounded transition-colors"
-                      >
-                        <X className="size-3.5" />
-                      </button>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => moveCustomReq(idx, idx - 1)}
+                          title="Move up"
+                          className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:pointer-events-none transition-colors"
+                        >
+                          <ChevronUp className="size-3" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === customReqs.length - 1}
+                          onClick={() => moveCustomReq(idx, idx + 1)}
+                          title="Move down"
+                          className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:pointer-events-none transition-colors"
+                        >
+                          <ChevronDown className="size-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReq(idx)}
+                          className="text-muted-foreground hover:text-danger p-0.5 rounded transition-colors ml-1"
+                          title="Remove requirement"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}

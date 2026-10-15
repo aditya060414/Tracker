@@ -6,6 +6,12 @@ import {
   setUserTrackerItem,
   syncUserTrackerData,
   checkMongoStatus,
+  saveCustomChallenge,
+  getCustomChallenges,
+  deleteCustomChallenge,
+  saveActiveChallenge,
+  getActiveChallenge,
+  migrateGuestChallenges,
 } from "../lib/mongodb";
 
 export async function handleApiRequest(req: Request): Promise<Response | null> {
@@ -18,7 +24,7 @@ export async function handleApiRequest(req: Request): Promise<Response | null> {
 
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS, DELETE",
     "Access-Control-Allow-Headers": "Content-Type",
     "Content-Type": "application/json",
   };
@@ -113,6 +119,98 @@ export async function handleApiRequest(req: Request): Promise<Response | null> {
         });
       }
       const success = await syncUserTrackerData(userId, data);
+      return new Response(JSON.stringify({ success }), { headers: corsHeaders });
+    }
+
+    // 8. Challenges - Fetch custom challenges and active progress from MongoDB
+    if (pathname === "/api/challenges" && req.method === "GET") {
+      const userId = url.searchParams.get("userId");
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "Missing userId" }), { headers: corsHeaders, status: 400 });
+      }
+      const [customList, activeChallenge] = await Promise.all([
+        getCustomChallenges(userId),
+        getActiveChallenge(userId),
+      ]);
+      return new Response(JSON.stringify({ success: true, customList, activeChallenge }), { headers: corsHeaders });
+    }
+
+    // 9. Challenges - Save custom challenge to MongoDB 'challenges' collection
+    if (pathname === "/api/challenges/custom" && req.method === "POST") {
+      const body = (await req.json()) as { userId?: string; challenge?: any };
+      const { userId, challenge } = body;
+      if (!userId || !challenge || !challenge.name) {
+        return new Response(JSON.stringify({ success: false, error: "userId and valid challenge are required" }), {
+          headers: corsHeaders,
+          status: 400,
+        });
+      }
+      const result = await saveCustomChallenge(userId, challenge);
+      return new Response(JSON.stringify(result), { headers: corsHeaders, status: result.success ? 200 : 500 });
+    }
+
+    // 10. Challenges - Delete custom challenge from MongoDB
+    if (
+      (pathname === "/api/challenges/custom/delete" || pathname === "/api/challenges/custom") &&
+      (req.method === "POST" || req.method === "DELETE")
+    ) {
+      const body = (await req.json()) as { userId?: string; id?: string };
+      const { userId, id } = body;
+      if (!userId || !id) {
+        return new Response(JSON.stringify({ success: false, error: "userId and challenge id are required" }), {
+          headers: corsHeaders,
+          status: 400,
+        });
+      }
+      const success = await deleteCustomChallenge(userId, id);
+      return new Response(JSON.stringify({ success }), { headers: corsHeaders });
+    }
+
+    // 11. Challenges - Save taken/active challenge and streak progress to MongoDB
+    if (
+      (pathname === "/api/challenges/take" || pathname === "/api/challenges/active") &&
+      req.method === "POST"
+    ) {
+      const body = (await req.json()) as {
+        userId?: string;
+        activeName?: string;
+        totalDays?: number;
+        day?: number;
+        streak?: number;
+        checked?: string[];
+        activeReqs?: string[];
+        history?: any[];
+      };
+      const { userId, activeName, totalDays, day, streak, checked, activeReqs, history } = body;
+      if (!userId || !activeName) {
+        return new Response(JSON.stringify({ success: false, error: "userId and activeName are required" }), {
+          headers: corsHeaders,
+          status: 400,
+        });
+      }
+      const success = await saveActiveChallenge(userId, {
+        activeName,
+        totalDays: totalDays ?? 30,
+        day: day ?? 1,
+        streak: streak ?? 0,
+        checked: checked ?? [],
+        activeReqs: activeReqs ?? [],
+        history: history ?? [],
+      });
+      return new Response(JSON.stringify({ success }), { headers: corsHeaders });
+    }
+
+    // 12. Migrate guest challenge data to authenticated user
+    if (pathname === "/api/challenges/migrate" && req.method === "POST") {
+      const body = (await req.json()) as { guestId?: string; authUserId?: string };
+      const { guestId, authUserId } = body;
+      if (!guestId || !authUserId) {
+        return new Response(JSON.stringify({ success: false, error: "guestId and authUserId are required" }), {
+          headers: corsHeaders,
+          status: 400,
+        });
+      }
+      const success = await migrateGuestChallenges(guestId, authUserId);
       return new Response(JSON.stringify({ success }), { headers: corsHeaders });
     }
 
