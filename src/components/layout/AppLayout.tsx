@@ -3,7 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Dumbbell, HeartPulse, Briefcase, Wallet, Lightbulb, CalendarClock,
   Map, Trophy, Settings, Sun, Moon, Bell, Flame, Menu, X, PanelLeftClose, PanelLeftOpen,
-  User, LogIn,
+  User, LogIn, History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
@@ -14,13 +14,19 @@ import { Logo } from "@/components/common/Logo";
 export const APP_VERSION = "v0.1.0";
 
 type NavItem = {
-  to: "/" | "/gym" | "/health" | "/work" | "/money-management" | "/ideas" | "/scheduler" | "/planning" | "/challenges" | "/settings" | "/login";
+  to: "/" | "/history" | "/gym" | "/health" | "/work" | "/money-management" | "/ideas" | "/scheduler" | "/planning" | "/challenges" | "/settings" | "/login";
   label: string;
   icon: typeof LayoutDashboard;
   badge?: number;
 };
 const groups: { label: string; items: NavItem[] }[] = [
-  { label: "Overview", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }] },
+  {
+    label: "Overview",
+    items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/history", label: "Everyday History", icon: History },
+    ],
+  },
   {
     label: "Personal",
     items: [

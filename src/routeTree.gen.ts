@@ -14,6 +14,7 @@ import { Route as ChallengesRouteImport } from './routes/challenges'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as GymRouteImport } from './routes/gym'
 import { Route as HealthRouteImport } from './routes/health'
+import { Route as HistoryRouteImport } from './routes/history'
 import { Route as IdeasRouteImport } from './routes/ideas'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MoneyManagementRouteImport } from './routes/money-management'
@@ -45,6 +46,11 @@ const GymRoute = GymRouteImport.update({
 const HealthRoute = HealthRouteImport.update({
   id: '/health',
   path: '/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IdeasRoute = IdeasRouteImport.update({
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/gym': typeof GymRoute
   '/health': typeof HealthRoute
+  '/history': typeof HistoryRoute
   '/ideas': typeof IdeasRoute
   '/login': typeof LoginRoute
   '/money-management': typeof MoneyManagementRoute
@@ -103,6 +110,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/gym': typeof GymRoute
   '/health': typeof HealthRoute
+  '/history': typeof HistoryRoute
   '/ideas': typeof IdeasRoute
   '/login': typeof LoginRoute
   '/money-management': typeof MoneyManagementRoute
@@ -118,6 +126,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/gym': typeof GymRoute
   '/health': typeof HealthRoute
+  '/history': typeof HistoryRoute
   '/ideas': typeof IdeasRoute
   '/login': typeof LoginRoute
   '/money-management': typeof MoneyManagementRoute
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gym'
     | '/health'
+    | '/history'
     | '/ideas'
     | '/login'
     | '/money-management'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gym'
     | '/health'
+    | '/history'
     | '/ideas'
     | '/login'
     | '/money-management'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gym'
     | '/health'
+    | '/history'
     | '/ideas'
     | '/login'
     | '/money-management'
@@ -177,6 +189,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   GymRoute: typeof GymRoute
   HealthRoute: typeof HealthRoute
+  HistoryRoute: typeof HistoryRoute
   IdeasRoute: typeof IdeasRoute
   LoginRoute: typeof LoginRoute
   MoneyManagementRoute: typeof MoneyManagementRoute
@@ -221,6 +234,13 @@ declare module '@tanstack/react-router' {
       path: '/health'
       fullPath: '/health'
       preLoaderRoute: typeof HealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ideas': {
@@ -281,6 +301,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   GymRoute: GymRoute,
   HealthRoute: HealthRoute,
+  HistoryRoute: HistoryRoute,
   IdeasRoute: IdeasRoute,
   LoginRoute: LoginRoute,
   MoneyManagementRoute: MoneyManagementRoute,

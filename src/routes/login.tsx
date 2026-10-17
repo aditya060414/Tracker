@@ -14,7 +14,7 @@ export const Route = createFileRoute("/login")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const { user, signup, login, logout, isLoading, mongoStatus } = useAuth();
+  const { user, signup, login, logout, isLoading, mongoStatus, syncWithDatabase } = useAuth();
 
   const [mode, setMode] = useState<"signup" | "login">("signup");
   const [name, setName] = useState("");
@@ -130,6 +130,13 @@ function AuthPage() {
                 className="flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-primary font-medium text-primary-foreground hover:bg-primary-hover"
               >
                 Go to Dashboard <ArrowRight className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => syncWithDatabase()}
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-[10px] border border-primary/40 bg-accent/30 text-xs font-semibold text-primary hover:bg-accent transition-colors"
+              >
+                <Database className="size-3.5" /> Sync All Data with Database
               </button>
               <button
                 onClick={logout}

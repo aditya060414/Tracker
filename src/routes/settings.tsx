@@ -29,7 +29,7 @@ const field = "h-11 w-full rounded-[10px] border bg-background px-3 outline-none
 
 function Settings() {
   const { theme, setTheme } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, logout, mongoStatus, syncWithDatabase } = useAuth();
   const [notif, setNotif] = useLocal("notif", { reminders: true, digest: true, challenge: false });
   const [name, setName] = useLocal("profile-name", "");
   return (
@@ -136,6 +136,34 @@ function Settings() {
             }}
             className="h-11 rounded-[10px] border px-4 font-medium hover:bg-elevated"
           >Download my data (JSON)</button>
+        </Panel>
+        <Panel>
+          <SectionHeader title="Database & Cloud Sync" icon={Database} />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">MongoDB Status:</span>
+              <span className={cn("flex items-center gap-1.5 font-medium", mongoStatus?.connected ? "text-success" : "text-warning")}>
+                <span className={cn("size-2 rounded-full", mongoStatus?.connected ? "bg-success" : "bg-warning animate-pulse")} />
+                {mongoStatus?.connected ? "Connected to MongoDB Atlas" : "Checking Connection..."}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Database:</span>
+              <span className="font-mono text-foreground font-medium">{mongoStatus?.database || "tracker_db"}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              All your goals, everyday history logs, work tasks, challenges, and gym records are automatically saved to MongoDB and fetched on login.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => syncWithDatabase()}
+                className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary-hover transition-colors"
+              >
+                <Database className="size-3.5" /> Save All to DB Now
+              </button>
+            </div>
+          </div>
         </Panel>
         <Panel>
           <SectionHeader title="Privacy & account" icon={ShieldCheck} />

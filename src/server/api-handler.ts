@@ -13,6 +13,8 @@ import {
   getActiveChallenge,
   migrateGuestChallenges,
 } from "../lib/mongodb";
+import { sanitizeHistoryLogs } from "../lib/daily-history";
+
 
 export async function handleApiRequest(req: Request): Promise<Response | null> {
   const url = new URL(req.url);
@@ -91,18 +93,24 @@ export async function handleApiRequest(req: Request): Promise<Response | null> {
         return new Response(JSON.stringify({ error: "Missing userId" }), { headers: corsHeaders, status: 400 });
       }
       const data = await getUserTrackerData(userId);
+      if (data && data["daily-history-logs"]) {
+        data["daily-history-logs"] = sanitizeHistoryLogs(data["daily-history-logs"] as any, { removePastDays: true });
+      }
       return new Response(JSON.stringify({ success: true, data }), { headers: corsHeaders });
     }
 
     // 6. Set user tracker item linked by MongoDB userId
     if (pathname === "/api/tracker" && req.method === "POST") {
       const body = (await req.json()) as { userId?: string; key?: string; value?: unknown };
-      const { userId, key, value } = body;
+      let { userId, key, value } = body;
       if (!userId || !key) {
         return new Response(JSON.stringify({ error: "userId and key are required" }), {
           headers: corsHeaders,
           status: 400,
         });
+      }
+      if (key === "daily-history-logs") {
+        value = sanitizeHistoryLogs(value as any, { removePastDays: true });
       }
       const success = await setUserTrackerItem(userId, key, value);
       return new Response(JSON.stringify({ success }), { headers: corsHeaders });
@@ -117,6 +125,9 @@ export async function handleApiRequest(req: Request): Promise<Response | null> {
           headers: corsHeaders,
           status: 400,
         });
+      }
+      if (data["daily-history-logs"]) {
+        data["daily-history-logs"] = sanitizeHistoryLogs(data["daily-history-logs"] as any, { removePastDays: true });
       }
       const success = await syncUserTrackerData(userId, data);
       return new Response(JSON.stringify({ success }), { headers: corsHeaders });
