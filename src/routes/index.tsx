@@ -884,8 +884,8 @@ function SpecialTask({
 }: {
   isViewingToday: boolean;
   selectedDateKey: string;
-  historicalTask?: SpecialTaskData | null;
-  onUpdateHistoricalTask?: (task: SpecialTaskData | null) => void;
+  historicalTask?: SpecialTaskData | null | undefined;
+  onUpdateHistoricalTask?: ((task: SpecialTaskData | null) => void) | undefined;
 }) {
   const [special, setSpecial] = useLocal<SpecialTaskData | null>("special-task", null);
   const [isAdding, setIsAdding] = useState(false);

@@ -105,7 +105,7 @@ describe("Daily History and Everyday Logs System", () => {
     expect(Object.keys(sanitized)).toEqual([todayKey]);
     expect(sanitized[yesterdayKey]).toBeUndefined();
     expect(sanitized["2026-10-15"]).toBeUndefined();
-    expect(sanitized[todayKey].goals[0].text).toBe("Real goal for today");
+    expect(sanitized[todayKey]!.goals[0]!.text).toBe("Real goal for today");
   });
 
   it("allows archiving and updating past logs with retrospective goals", () => {

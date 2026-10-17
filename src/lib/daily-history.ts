@@ -2,15 +2,15 @@ export type DailyGoalItem = {
   id: string;
   text: string;
   done: boolean;
-  time?: string;
+  time?: string | undefined;
 };
 
 export type DailyFocusSessionItem = {
   id: string;
   name: string;
   minutes: number;
-  tag?: string;
-  time?: string;
+  tag?: string | undefined;
+  time?: string | undefined;
 };
 
 export type DailySpecialTask = {
@@ -23,9 +23,9 @@ export type DailyChallengeSnapshot = {
   day: number;
   totalDays: number;
   streak: number;
-  completedToday?: boolean;
-  checkedCount?: number;
-  totalCount?: number;
+  completedToday?: boolean | undefined;
+  checkedCount?: number | undefined;
+  totalCount?: number | undefined;
 };
 
 export type DailyLog = {
@@ -37,11 +37,11 @@ export type DailyLog = {
   completionPct: number; // 0-100
   focusMinutes: number;
   focusSessions: DailyFocusSessionItem[];
-  specialTask?: DailySpecialTask | null;
-  challenge?: DailyChallengeSnapshot;
-  spent?: number;
-  notes?: string;
-  mood?: "great" | "good" | "neutral" | "tired" | "rough";
+  specialTask?: DailySpecialTask | null | undefined;
+  challenge?: DailyChallengeSnapshot | undefined;
+  spent?: number | undefined;
+  notes?: string | undefined;
+  mood?: "great" | "good" | "neutral" | "tired" | "rough" | undefined;
 };
 
 export type DailyHistoryMap = Record<string, DailyLog>;
