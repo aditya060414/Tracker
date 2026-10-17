@@ -10,9 +10,19 @@ export function Panel({ className, children }: { className?: string; children: R
   );
 }
 
-export function SectionHeader({ title, icon: Icon, action }: { title: string; icon?: LucideIcon; action?: ReactNode }) {
+export function SectionHeader({
+  title,
+  icon: Icon,
+  action,
+  className,
+}: {
+  title: string;
+  icon?: LucideIcon;
+  action?: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="mb-4 flex items-center justify-between gap-2">
+    <div className={cn("mb-4 flex items-center justify-between gap-2", className)}>
       <h3 className="flex items-center gap-2 text-[15px] font-semibold">
         {Icon && <Icon className="size-4 text-muted-foreground" aria-hidden />}
         {title}

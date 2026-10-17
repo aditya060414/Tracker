@@ -51,7 +51,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Goal = { id: string; text: string; done: boolean; time?: string | undefined };
-type Tx = { id: string; name: string; cat: string; amount: number; date: string };
+type Tx = { id: string; name: string; cat: string; amount: number; date: string; type?: "expense" | "income" };
 type FocusSession = { id: string; minutes: number; name?: string; tag?: string };
 type SpecialTaskData = { title: string; done: boolean };
 
@@ -97,8 +97,8 @@ function Dashboard() {
   const todayPct = goals.length ? Math.round((todayDone / goals.length) * 100) : 0;
 
   // Real financial calculations
-  const expenses = txs.filter((t) => t.amount < 0);
-  const spent = Math.abs(expenses.reduce((s, t) => s + t.amount, 0));
+  const expenses = txs.filter((t) => (t.type ? t.type === "expense" : t.amount < 0));
+  const spent = expenses.reduce((s, t) => s + Math.abs(t.amount), 0);
   const remainingBudget = Math.max(0, budget - spent);
   const budgetPctUsed = budget > 0 ? Math.round((spent / budget) * 100) : 0;
 
